@@ -3,6 +3,16 @@ import pytorch_lightning as pl
 from pytorch_lightning.utilities.cli import LightningCLI
 import torch
 class CustomLightningCLI(LightningCLI):
+    def __init__(self, config_path, *args, **kwargs):
+        self.config_path = config_path
+        super().__init__(*args, **kwargs)
+
+    def parse_arguments(self):
+        if self.config_path:
+            self.config = self.parser.parse_path(self.config_path)
+        else:
+            self.config = self.parser.parse_args()
+
     def add_arguments_to_parser(self, parser):
         parser.add_argument('--experiment_name', default='DefaultModel')
         parser.add_argument('--checkpoint_monitor', default='loss')
@@ -26,19 +36,8 @@ class CustomLightningCLI(LightningCLI):
 
 
 def main(config_path=None, gpus=1):
-    # Replacing command line argument for --config flag 
-    # with `config_path` variable
-    if config_path:
-        try:
-            idx = sys.argv.index('--config')
-            if idx + 1 < len(sys.argv):
-                sys.argv[idx + 1] = config_path
-            else:
-                sys.argv.append(config_path)
-        except:
-            sys.argv.extend(['--config', config_path])
-
     cli = CustomLightningCLI(
+        config_path,
         pl.LightningModule,
         pl.LightningDataModule,
         trainer_defaults={'gpus': gpus, 'benchmark': (gpus is not None)},
