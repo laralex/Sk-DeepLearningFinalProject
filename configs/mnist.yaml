@@ -3,7 +3,7 @@ checkpoint_monitor: 'accuracy/val'
 checkpoint_monitor_mode: 'max'
 
 trainer:
-  max_epochs: 100
+  max_epochs: 10
 
 model:
   class_path: models.mnist_classifier.MnistClassifier
@@ -12,7 +12,7 @@ model:
     num_classes: 10
     optimizer: SGD
     optimizer_kwargs:
-      lr: 0.1
+      lr: 0.001
       momentum: 0.9
     scheduler: StepLR
     scheduler_kwargs:

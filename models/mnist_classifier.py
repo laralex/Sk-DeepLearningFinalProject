@@ -37,32 +37,29 @@ class MnistClassifier(pl.LightningModule):
         data, target = batch
         preds = self.forward(data)
         preds_proba = torch.softmax(preds, dim=1)
-        loss = self.criterion(preds, target)
-        self.log("loss/train", loss, prog_bar=True, logger=False)
 
-        return {'loss' : loss, 'preds_proba' : preds_proba, 'target' : target}
+        loss = self.criterion(preds, target)
+        self.log("loss/train", loss, prog_bar=False, logger=True)
+        return {"loss": loss, "preds_proba": preds_proba, "target": target}
 
     def validation_step(self, batch, batch_idx):
         data, target = batch
         preds = self.forward(data)
         preds_proba = torch.softmax(preds, dim=1)
 
-        loss = self.criterion(preds, target)
-        self.log("loss/val", loss, prog_bar=True, logger=False)
-        return {'loss' : loss, 'preds_proba' : preds_proba, 'target' : target}
+        return {'preds_proba' : preds_proba, 'target' : target}
 
-    def training_step_end(self, outputs):
-        self.log("loss/train", outputs["loss"].mean(dim=0), prog_bar=True)
+    def training_epoch_end(self, outputs):
+        preds_probas = torch.cat([r['preds_proba'] for r in outputs], dim=0)
+        targets = torch.cat([r['target'] for r in outputs], dim=0)
+        self.train_accuracy(preds_probas, targets)
+        self.log('accuracy/train', self.train_accuracy, prog_bar=True, logger=True)
 
-        self.train_accuracy(outputs['preds_proba'], outputs['target'])
-
-        self.log('accuracy/train', self.train_accuracy, prog_bar=True)
-
-    def validation_step_end(self, outputs):
-        self.log("loss/val", outputs["loss"].mean(dim=0), prog_bar=True)
-
-        self.val_accuracy(outputs['preds_proba'], outputs['target'])
-        self.log('accuracy/val', self.train_accuracy, prog_bar=True)
+    def validation_epoch_end(self, outputs):
+        preds_probas = torch.cat([r['preds_proba'] for r in outputs], dim=0)
+        targets = torch.cat([r['target'] for r in outputs], dim=0)
+        self.val_accuracy(preds_probas, targets)
+        self.log('accuracy/val', self.val_accuracy, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         OptimizerClass = getattr(torch.optim, self.optimizer)
@@ -94,5 +91,5 @@ class SimpleConvNet(nn.Module):
         x = F.relu(x)
         x = self.dropout2(x)
         x = self.fc2(x)
-        outputs = F.log_softmax(x)
+        outputs = F.log_softmax(x, dim=1)
         return outputs
