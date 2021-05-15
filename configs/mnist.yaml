@@ -22,5 +22,5 @@ model:
 data:
   class_path: data.mnist.MnistDataset
   init_args:
-    download_root: './downloads'
+    download_to: 'downloads' # relative path
     batch_size: 200

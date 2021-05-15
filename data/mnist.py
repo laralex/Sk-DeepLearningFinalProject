@@ -8,9 +8,9 @@ from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 
 class MnistDataset(pl.LightningDataModule):
-    def __init__(self, download_root: str, batch_size: int):
+    def __init__(self, download_to: str, batch_size: int):
         super().__init__()
-        self.download_root = download_root
+        self.download_to = download_to
         self.batch_size = batch_size
         self.transform = torchvision.transforms.Compose([
             torchvision.transforms.ToTensor(),
@@ -18,15 +18,15 @@ class MnistDataset(pl.LightningDataModule):
 
     def prepare_data(self):
         # once-time tasks like downloading, generating
-        torchvision.datasets.MNIST(self.download_root, train=True, download=True)
-        torchvision.datasets.MNIST(self.download_root, train=False, download=True)
+        torchvision.datasets.MNIST(self.download_to, train=True, download=True)
+        torchvision.datasets.MNIST(self.download_to, train=False, download=True)
 
     def setup(self, stage=None): 
         if stage is None or stage == "fit":
-            self.train =  torchvision.datasets.MNIST(self.download_root, train=True, transform=self.transform)
-            self.val   = torchvision.datasets.MNIST(self.download_root, train=False, transform=self.transform)
+            self.train =  torchvision.datasets.MNIST(self.download_to, train=True, transform=self.transform)
+            self.val   = torchvision.datasets.MNIST(self.download_to, train=False, transform=self.transform)
         if stage is None or stage == "test":
-            self.test  = torchvision.datasets.MNIST(self.download_root, train=False, transform=self.transform)
+            self.test  = torchvision.datasets.MNIST(self.download_to, train=False, transform=self.transform)
 
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster

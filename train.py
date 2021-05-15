@@ -3,7 +3,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.utilities.cli import LightningCLI
 import torch
 class CustomLightningCLI(LightningCLI):
-    def __init__(self, config_path, *args, **kwargs):
+    def __init__(self, root_dir, config_path, *args, **kwargs):
+        self.root_dir = root_dir
         self.config_path = config_path
         super().__init__(*args, **kwargs)
 
@@ -24,7 +25,7 @@ class CustomLightningCLI(LightningCLI):
         monitor_mode    = self.config['checkpoint_monitor_mode']
 
         # Initialize TensorBoard logger
-        logger = pl.loggers.TensorBoardLogger(save_dir=f'logs', name=experiment_name)
+        logger = pl.loggers.TensorBoardLogger(save_dir=f'{self.root_dir}/logs', name=experiment_name)
         self.trainer.logger = logger
 
         # Initialize saving of a best checkpoint
@@ -35,15 +36,21 @@ class CustomLightningCLI(LightningCLI):
         self.trainer.callbacks.append(callback)
 
 
-def main(config_path=None, gpus=1):
+def main(root_dir='.', config_path=None, gpu_indices=1):
+    """
+    root_dir: absolute path to where to put logs/ directory
+    config_path: absolute path to a file with configuration in YAML format
+    gpus: indices of GPUs to use, None for CPU, list for multiple GPUs
+    """
     cli = CustomLightningCLI(
+        root_dir,
         config_path,
         pl.LightningModule,
         pl.LightningDataModule,
-        trainer_defaults={'gpus': gpus, 'benchmark': (gpus is not None)},
+        trainer_defaults={'gpus': gpu_indices, 'benchmark': (gpu_indices is not None)},
         seed_everything_default=42,
         subclass_mode_model=True,
         subclass_mode_data=True)
 
 if __name__ == '__main__':
-    main(gpus=1 if torch.cuda.is_available() else None)
+    main(gpu_indices=1 if torch.cuda.is_available() else None)
