@@ -126,4 +126,12 @@ venv.bak/
 dmypy.json
 
 # Pyre type checker
-.pyre/
+.pyre
+
+# Reports
+.pdf
+
+# To not add local experiments
+SignalRecoveryExperiments/
+experiments/
+downloads/ 
