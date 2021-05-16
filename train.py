@@ -1,11 +1,14 @@
-import sys
-import pytorch_lightning as pl
-from pytorch_lightning.utilities.cli import LightningCLI
 import torch
+import os
+import pytorch_lightning as pl
+from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
+
 class CustomLightningCLI(LightningCLI):
-    def __init__(self, root_dir, config_path, *args, **kwargs):
+    def __init__(self, root_dir, config_path, *args, do_fit=True, version=None, **kwargs):
         self.root_dir = root_dir
         self.config_path = config_path
+        self.do_fit = do_fit
+        self.version = version
         super().__init__(*args, **kwargs)
 
     def parse_arguments(self):
@@ -25,32 +28,64 @@ class CustomLightningCLI(LightningCLI):
         monitor_mode    = self.config['checkpoint_monitor_mode']
 
         # Initialize TensorBoard logger
-        logger = pl.loggers.TensorBoardLogger(save_dir=f'{self.root_dir}/logs', name=experiment_name)
+        logger = pl.loggers.TensorBoardLogger(
+            save_dir=f'{self.root_dir}/logs',
+            name=experiment_name,
+            version=self.version)
         self.trainer.logger = logger
 
         # Initialize saving of a best checkpoint
         callback = pl.callbacks.ModelCheckpoint(
             monitor=monitor,
             filename="{epoch:02d}-{" + monitor + ":.3f}",
-            mode=monitor_mode)
+            mode=monitor_mode,
+            )
         self.trainer.callbacks.append(callback)
 
+    def fit(self):
+        if self.do_fit:
+            super().fit()
 
-def main(root_dir='.', config_path=None, gpu_indices=1):
+def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None):
     """
     root_dir: absolute path to where to put logs/ directory
     config_path: absolute path to a file with configuration in YAML format
     gpus: indices of GPUs to use, None for CPU, list for multiple GPUs
+    checkpoint: a tuple of (source_str, type, action), where source_str is a
+    link/path to a checkpoint, type='link'|'path', and action='resume_training'|'load_model'
     """
-    cli = CustomLightningCLI(
-        root_dir,
-        config_path,
-        pl.LightningModule,
-        pl.LightningDataModule,
-        trainer_defaults={'gpus': gpu_indices, 'benchmark': (gpu_indices is not None)},
-        seed_everything_default=42,
-        subclass_mode_model=True,
-        subclass_mode_data=True)
+    do_fit = True
+    trainer_defaults = {'gpus': gpu_indices, 'benchmark': (gpu_indices is not None)}
+    version = None
+    save_config_callback = SaveConfigCallback
+
+    # load checkpoint
+    if checkpoint_kwargs is not None:
+        save_config_callback = None
+        trainer_defaults['resume_from_checkpoint'] = checkpoint_kwargs['source']
+        if checkpoint_kwargs.get('action', 'load_model') == 'load_model':
+            do_fit = False
+        version = checkpoint_kwargs.get('version', 'from_checkpoint')
+
+    old_cwd = os.getcwd()
+    os.chdir(root_dir)
+    try:
+        cli = CustomLightningCLI(
+            root_dir,
+            config_path,
+            pl.LightningModule,
+            pl.LightningDataModule,
+            do_fit=do_fit,
+            version=version,
+            trainer_defaults=trainer_defaults,
+            save_config_callback=save_config_callback,
+            seed_everything_default=42,
+            subclass_mode_model=True,
+            subclass_mode_data=True)
+    finally:
+        os.chdir(old_cwd)
+
+    return cli.model
 
 if __name__ == '__main__':
     main(gpu_indices=1 if torch.cuda.is_available() else None)
