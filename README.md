@@ -18,8 +18,12 @@ Inspired by the papers:
 ### Brief repository overview
 * 👉 [`train.py`](train.py) - entry point for training of models (see
   **Reproduce training** section)
-* [`notebooks/training.ipynb`](notebooks/training.ipynb) - a quickstart Jupyter
-  notebook for training
+* 👉 [`notebooks/training.ipynb`](notebooks/training.ipynb) - a quickstart Jupyter
+  notebook for training or loading from a checkpoint
+* [`configs/`](configs/) - YAML files that define each experiment's parameters
+* [`data/`](data/) - definitions of datasets (either preloaded or generated)
+* [`materials/`](materials/) - supplementary materials like presentations, reports, plots
+* [`models/`](models/) - definitions of models and how their training process (optimizers, learning rate schedulers)
 
 ### Requirements
 A GPU is recommended to perform the experiments. You can use [Google
@@ -28,8 +32,15 @@ Colab](colab.research.google.com) with Jupyter notebooks provided in
 
 Main prerequisites are:
 
-- [`pytorch`](http://pytorch.org/), [`pytorch-lightning`](https://www.pytorchlightning.ai/)
-- `numpy`, `tensorboard`, `tqdm`
+- [`pytorch`](http://pytorch.org/) - training
+- [`pytorch-lightning`](https://www.pytorchlightning.ai/) with [`LightningCLI`](https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_cli.html#lightningcli) - training
+- [`numpy`](https://anaconda.org/anaconda/numpy) - data generation
+
+Optional:
+- [`google-colab`](https://anaconda.org/conda-forge/google-colab) - if you want to mount a Google Drive to your Jupyter Notebook to store training artifacts
+- [`gdown`](https://anaconda.org/conda-forge/gdown) - if you want to download checkpoints from Google Drive by ID
+- [`tensorboard`](https://anaconda.org/conda-forge/tensorboard) - if you want to view training/validation metrics of different experiments
+- [`torchvision`](https://anaconda.org/pytorch/torchvision) - only if you want to debug the workflow with a trivial MNIST classifier example
 
 
 <!TODO:
@@ -42,6 +53,16 @@ conda activate dyconv
 !>
 
 ### Reproduce training
-...
+The easiest way to start training of one of experiments listed in [`configs/`](configs/), is to run
+```bash
+python train.py --config configs/your_chosen_experiment.yaml
+```
+After that you'll find new folders `downloads/` with external downloaded files (like datasets) and `logs/` which will contain folders for each distinct experiment. Under each such experiment folder you'll find results of all the runs of this very same experiment, namely folders like `version_0/`, `version_1/`, etc, which would finally contain:
+- `config.yaml` with the parameters of the experiment for reproducibility (same parameters as in `your_chosen_experiment.yaml`)
+- `events...` file with logs of TensorBoard, ready to be visualized in it
+- `checkpoints/` directory with the best epoch checkpoint and the lastest epoch ckeckpoint (you can use those to resume training from them, or load them for inference)
+
+A better approach to start training (or resuming or loading for inference), would be to use [`notebooks/training.ipynb`](notebooks/training.ipynb) Jupyter Notebook. In the first section you can set the parameters of further work. You're advised not to make further adjustments in other sections.
+
 ### Experimental results
 ...
