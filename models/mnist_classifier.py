@@ -39,7 +39,7 @@ class MnistClassifier(pl.LightningModule):
         preds_proba = torch.softmax(preds, dim=1)
 
         loss = self.criterion(preds, target)
-        self.log("loss/train", loss, prog_bar=False, logger=True)
+        self.log("loss_train", loss, prog_bar=False, logger=True)
         return {"loss": loss, "preds_proba": preds_proba, "target": target}
 
     def validation_step(self, batch, batch_idx):
@@ -53,13 +53,13 @@ class MnistClassifier(pl.LightningModule):
         preds_probas = torch.cat([r['preds_proba'] for r in outputs], dim=0)
         targets = torch.cat([r['target'] for r in outputs], dim=0)
         self.train_accuracy(preds_probas, targets)
-        self.log('accuracy/train', self.train_accuracy, prog_bar=True, logger=True)
+        self.log('accuracy_train', self.train_accuracy, prog_bar=True, logger=True)
 
     def validation_epoch_end(self, outputs):
         preds_probas = torch.cat([r['preds_proba'] for r in outputs], dim=0)
         targets = torch.cat([r['target'] for r in outputs], dim=0)
         self.val_accuracy(preds_probas, targets)
-        self.log('accuracy/val', self.val_accuracy, prog_bar=True, logger=True)
+        self.log('accuracy_val', self.val_accuracy, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         OptimizerClass = getattr(torch.optim, self.optimizer)

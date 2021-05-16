@@ -1,5 +1,5 @@
 experiment_name: 'MNIST_Classifier'
-checkpoint_monitor: 'accuracy/val'
+checkpoint_monitor: 'accuracy_val'
 checkpoint_monitor_mode: 'max'
 
 trainer:
