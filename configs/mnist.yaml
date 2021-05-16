@@ -1,0 +1,26 @@
+experiment_name: 'MNIST_Classifier'
+checkpoint_monitor: 'accuracy_val'
+checkpoint_monitor_mode: 'max'
+
+trainer:
+  max_epochs: 10
+
+model:
+  class_path: models.mnist_classifier.MnistClassifier
+  init_args:
+    in_channels: 1
+    num_classes: 10
+    optimizer: SGD
+    optimizer_kwargs:
+      lr: 0.001
+      momentum: 0.9
+    scheduler: StepLR
+    scheduler_kwargs:
+      step_size: 30
+      gamma: 0.1
+
+data:
+  class_path: data.mnist.MnistDataset
+  init_args:
+    download_to: 'downloads' # relative path
+    batch_size: 200
