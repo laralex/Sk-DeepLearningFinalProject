@@ -31,7 +31,7 @@ class CustomLightningCLI(LightningCLI):
         # Initialize saving of a best checkpoint
         callback = pl.callbacks.ModelCheckpoint(
             monitor=monitor,
-            filename="{epoch:02d}-{" + monitor.replace('/', '_') + ":.3f}",
+            filename="{epoch:02d}-{" + monitor + ":.3f}",
             mode=monitor_mode)
         self.trainer.callbacks.append(callback)
 
