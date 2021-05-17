@@ -17,7 +17,7 @@ data_gen = SplitStepGenerator(batch_size=10,
                           z_stride=1000,
                           dim_t=2**12,
                           dispersion_compensate=True,
-                          num_bloks = 16)
+                          num_blocks = 16)
 
 # a = torch.tensor([1, -1, 1, -1, -1]).view(1,5)
 
@@ -29,7 +29,7 @@ t_start, t_end = data_gen.t_window
 
 u = transform_to_1d(u)
 
-I = (u * torch.conj(u)).type(torch.float32)
+I = abs(u * torch.conj(u)).type(torch.float32)
 
 # Plot first(0) batch
 fig = px.line(x=t[t_start:t_end], y=I[0,-1,t_start:t_end], title='Output intensity', labels={'x':'Time', 'y':'Intensity'})
