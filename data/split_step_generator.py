@@ -17,8 +17,9 @@ class SplitStepGenerator(pl.LightningDataModule):
                  z_end: float,
                  dz: float,
                  z_stride: int,
-                 num_t_points: int,
-                 dispersion_compensate: bool):
+                 dim_t: int,
+                 dispersion_compensate: bool,
+                 num_bloks: int):
         super().__init__()
         self.batch_size = batch_size
         self.seq_len = seq_len
@@ -28,62 +29,150 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.z_end = z_end
         self.dz = dz
         self.z_stride = z_stride
-        self.num_z_points = int(z_end / (dz * z_stride)) + 1
-        self.num_t_points = num_t_points
+        self.dim_z = int(z_end / (dz * z_stride)) + 1
+        self.dim_t = dim_t
         self.dispersion_compensate = dispersion_compensate
+        self.num_bloks = num_bloks
+        self.t_end = (seq_len + 1) * pulse_width
+        
+        self.t_window = None
     
     def Etanal(self, t, z, a, T):
-        E0 = torch.zeros(t.shape, dtype=torch.complex128)
-        for k in range(1, len(a)+1):
-            E0 = E0 + a[k-1]/(np.pi**(1/4)*torch.sqrt(1 + 1j*z))*torch.exp(-(t-k*T)**2/(2*(1 + 1j*z)))
-        return E0
+        '''
+        Parameters
+        ----------
+        t : TYPE: torch.float32 tensor of shape [dim_t]
+            DESCRIPTION: Time points. See prepare_data description.
+        z : TYPE: torch.int64
+            DESCRIPTION: In this implementation here z = 0, which corresponds
+            to transmitting point.
+        a : TYPE: torch.int64 tensor of shape [batch_size, seq_len]
+            DESCRIPTION: Pulse amplitude set.
+        T : TYPE: int
+            DESCRIPTION: Pulse width.
 
-    def prepare_data(self, a=None):
-        if a is None:
-            a = 2*np.random.randint(1,3, size=self.seq_len) - 3
-        else:
-            self.seq_len = len(a)
+        Returns
+        -------
+        E0 : TYPE: torch.complex128 tensor of shape [batch_size, dim_t]
+            DESCRIPTION: Initial data at transmitting point (target).
+        '''
+        E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128)
+        for k in range(1, self.seq_len + 1):
+            x = (a[:,k-1]/(np.pi**(1/4)*torch.sqrt(1 + 1j*z))).view(a.shape[0], 1)
+            y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
+            
+            E0 = E0 + x*y
+        return E0
+    
+    def split_step_solver(self, a, T, d, c, L):
+        '''
+        Parameters
+        ----------
+        a : TYPE: torch.int64 tensor of shape [batch_size, seq_len], optional
+            DESCRIPTION: Pulse amplitude set.
+        T : TYPE: float
+            DESCRIPTION: Pulse width.
+        d : TYPE: float
+            DESCRIPTION: dispersion coefficient.
+        c : TYPE: float
+            DESCRIPTION: nonlinearity coefficient.
+        L : TYPE: float
+            DESCRIPTION: End of transmission line (z_end).
+
+        Returns
+        -------
+        t : TYPE: torch.float32 tensor of shape [dim_t]
+            DESCRIPTION: Time points. See prepare_data description.
+        z : TYPE: torch.float32 tensor of shape [dim_z]
+            DESCRIPTION: Points in space. See prepare_data description.
+        u : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t].
+            DESCRIPTION: Output of the split-step solution.
+        '''
+        z = torch.linspace(0, L, self.dim_z)
         
-        z = torch.linspace(0, self.z_end, self.num_z_points)
-        
-        tmax = (self.seq_len + 1) * self.pulse_width
-        tMax = tmax + 5*np.sqrt(2*(1 + self.z_end**2))
+        tMax = self.t_end + 5*np.sqrt(2*(1 + L**2))
         tMin = -tMax
         
-        dt = (tMax - tMin) / self.num_t_points
-        t = torch.linspace(tMin, tMax-dt, self.num_t_points)
+        dt = (tMax - tMin) / self.dim_t
+        t = torch.linspace(tMin, tMax-dt, self.dim_t)
         
         # prepare frequencies
         dw = 2*np.pi/(tMax - tMin)
-        w = dw*torch.cat((torch.arange(0, self.num_t_points/2+1),
-                          torch.arange(-self.num_t_points/2+1, 0)))
+        w = dw*torch.cat((torch.arange(0, self.dim_t/2+1),
+                          torch.arange(-self.dim_t/2+1, 0)))
         
         # prepare linear propagator
-        LP = torch.exp(-1j*self.dispersion*self.dz/2*w**2)
+        LP = torch.exp(-1j*d*self.dz/2*w**2)
         
         # Set initial condition
-        u = torch.zeros(self.num_z_points, self.num_t_points, dtype=torch.complex128)
+        u = torch.zeros(self.batch_size, self.dim_z, self.dim_t, dtype=torch.complex128)
         
-        buf = self.Etanal(t, torch.tensor(0), a, self.pulse_width)
-        u[0,:] = buf
+        buf = self.Etanal(t, torch.tensor(0), a, T)
+        u[:,0,:] = buf
         
         n = 0
         # Numerical integration (split-step)
-        for i in range(1, int(self.z_end / self.dz) + 1):
+        for i in range(1, int(L / self.dz) + 1):
             buf = ifft(LP * fft(buf))
-            buf = buf*torch.exp(1j*self.nonlinearity*self.dz*buf.abs()**2)
+            buf = buf*torch.exp(1j*c*self.dz*buf.abs()**2)
             buf = ifft(LP*fft(buf))
 
             if i % self.z_stride == 0:
                 n += 1
-                u[n,:] = buf
+                u[:,n,:] = buf
         
         # Dispersion compensation procedure (back propagation D**(-1))
         if self.dispersion_compensate:
             zw = torch.mm(z.view(z.shape[-1], 1), w.view(1, w.shape[-1])**2)
-            u = ifft(torch.exp(1j*self.dispersion*zw)*fft(u))
+            u = ifft(torch.exp(1j*d*zw)*fft(u))
         
         return t, z, u
+
+    def prepare_data(self, two_dim_data=False, a=None):
+        '''
+        Direct signal propagation is performed through the split-step method.
+        Optional: dispersion compensation and data transformation in 2d.
+
+        Parameters
+        ----------
+        two_dim_data : TYPE: bool, optional
+            DESCRIPTION: Determine whether or not to make a transformation
+            in 2d. The default is False.
+        a : TYPE: torch.int64 tensor of shape [batch_size, seq_len], optional
+            DESCRIPTION: Pulse amplitude set. The default is None.
+
+        Returns
+        -------
+        t : TYPE: torch.float32 tensor of shape [dim_t]
+            DESCRIPTION: Time points. The boundaries of this vector are taken
+            in such a way that the signal broadened as it propagates does not
+            go beyond the calculation boundaries.
+        z : TYPE: torch.float32 tensor of shape [dim_z]
+            DESCRIPTION: Points in space taken from 0 to z_end with a
+            periodicity z_stride.
+        E : TYPE: torch.complex128 tensor
+            Shape in case of 1d-time: [batch_size, dim_z, dim_t].
+            Shape in case of 1d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
+            DESCRIPTION: Output transmission line data.
+        '''
+        if a is None:
+            a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len)) - 3
+        else:
+            self.seq_len = a.shape[-1]
+            self.t_end = (self.seq_len + 1) * self.pulse_width
+        
+        t, z, E = self.split_step_solver(a = a,
+                                         T = self.pulse_width,
+                                         d = self.dispersion,
+                                         c = self.nonlinearity,
+                                         L = self.z_end)
+        
+        self.t_window = [torch.abs(t-0).argmin(), torch.abs(t-self.t_end).argmin()]
+        
+        if two_dim_data:
+            E = transform_to_2d(E, self.num_bloks)
+        
+        return t, z, E
 
     def setup(self, stage: Optional[str] = None):
         # transforming, splitting
@@ -102,3 +191,56 @@ class SplitStepGenerator(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test, batch_size=self.batch_size, pin_memory=False)
+
+
+def transform_to_2d(data, num_bloks):
+    '''
+    Parameters
+    ----------
+    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t]
+        DESCRIPTION: Output transmission line data with 1d-time.
+    num_bloks : TYPE: int
+        DESCRIPTION: The number of blocks into which the data will be split
+        during transformation into 2d-time data. Time dimension is splitted
+        on blocks and reshaped to 2d dimensions with overlaps.
+
+    Returns
+    -------
+    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, 2*dim_t_per_blok, num_bloks]
+        DESCRIPTION: Output transmission line data with padded 2d-time.
+    '''
+    bs, dim_z, dim_t = data.shape
+    dim_t_per_blok = int(dim_t/num_bloks)
+    data = data.view(bs, dim_z, num_bloks, dim_t_per_blok).transpose(-2,-1)
+    
+    data_up = data[:, :, 0:int(dim_t_per_blok/2), 1:]
+    data_down = data[:, :, int(dim_t_per_blok/2):, 0:-1]
+    
+    padd_zeros = torch.zeros(bs, dim_z, int(dim_t_per_blok/2), 1)
+    
+    data_up = torch.cat((data_up, padd_zeros), dim=-1)
+    data_down = torch.cat((padd_zeros, data_down), dim=-1)
+    
+    data = torch.cat((data_down, data), dim=-2)
+    data = torch.cat((data, data_up), dim=-2)
+    
+    return data
+
+def transform_to_1d(data):
+    '''
+    Reverse operation to transform_to_2d
+    
+    Parameters
+    ----------
+    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, 2*dim_t_per_blok, num_bloks]
+        DESCRIPTION: Data with 2d-time.
+
+    Returns
+    -------
+    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t]
+        DESCRIPTION: Data with 1d-time.
+    '''
+    dim_padded_t = data.shape[-2]
+    data = data[:,:,int(dim_padded_t/4):int(dim_padded_t*3/4),:]
+    data = data.transpose(-2,-1).flatten(-2,-1)
+    return data
