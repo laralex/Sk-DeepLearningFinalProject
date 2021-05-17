@@ -1,4 +1,5 @@
 from typing import Any, Dict, Optional, Type, Union
+import contextlib
 
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -19,7 +20,11 @@ class SplitStepGenerator(pl.LightningDataModule):
                  z_stride: int,
                  dim_t: int,
                  dispersion_compensate: bool,
-                 num_bloks: int):
+                 num_bloks: int,
+                 two_dim_data=False,
+                 pulse_amplitudes=None,
+                 pulse_amplitudes_seed=None,
+                 ):
         super().__init__()
         self.batch_size = batch_size
         self.seq_len = seq_len
@@ -33,6 +38,9 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.dim_t = dim_t
         self.dispersion_compensate = dispersion_compensate
         self.num_bloks = num_bloks
+        self.two_dim_data = two_dim_data
+        self.pulse_amplitudes = pulse_amplitudes
+        self.pulse_amplitudes_seed = pulse_amplitudes_seed
         self.t_end = (seq_len + 1) * pulse_width
         
         self.t_window = None
@@ -128,20 +136,12 @@ class SplitStepGenerator(pl.LightningDataModule):
         
         return t, z, u
 
-    def prepare_data(self, two_dim_data=False, a=None):
+    def prepare_data(self):
         '''
         Direct signal propagation is performed through the split-step method.
         Optional: dispersion compensation and data transformation in 2d.
 
-        Parameters
-        ----------
-        two_dim_data : TYPE: bool, optional
-            DESCRIPTION: Determine whether or not to make a transformation
-            in 2d. The default is False.
-        a : TYPE: torch.int64 tensor of shape [batch_size, seq_len], optional
-            DESCRIPTION: Pulse amplitude set. The default is None.
-
-        Returns
+        Assigns self. attributes
         -------
         t : TYPE: torch.float32 tensor of shape [dim_t]
             DESCRIPTION: Time points. The boundaries of this vector are taken
@@ -152,27 +152,35 @@ class SplitStepGenerator(pl.LightningDataModule):
             periodicity z_stride.
         E : TYPE: torch.complex128 tensor
             Shape in case of 1d-time: [batch_size, dim_z, dim_t].
-            Shape in case of 1d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
+            Shape in case of 2d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
             DESCRIPTION: Output transmission line data.
         '''
+        a = self.pulse_amplitudes
+
         if a is None:
-            a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len)) - 3
+            # fix seed for this particular generation
+            if self.pulse_amplitudes_seed is None:
+                context = contextlib.nullcontext()
+            else:
+                context = torch.random.fork_rng()
+                torch.random.manual_seed(self.pulse_amplitudes_seed)
+            with context:
+                a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len)) - 3
         else:
             self.seq_len = a.shape[-1]
             self.t_end = (self.seq_len + 1) * self.pulse_width
         
-        t, z, E = self.split_step_solver(a = a,
-                                         T = self.pulse_width,
-                                         d = self.dispersion,
-                                         c = self.nonlinearity,
-                                         L = self.z_end)
+        self.t, self.z, self.E = self.split_step_solver(
+                                        a = a,
+                                        T = self.pulse_width,
+                                        d = self.dispersion,
+                                        c = self.nonlinearity,
+                                        L = self.z_end)
         
-        self.t_window = [torch.abs(t-0).argmin(), torch.abs(t-self.t_end).argmin()]
+        self.t_window = [torch.abs(self.t-0).argmin(), torch.abs(self.t-self.t_end).argmin()]
         
-        if two_dim_data:
-            E = transform_to_2d(E, self.num_bloks)
-        
-        return t, z, E
+        if self.two_dim_data:
+            self.E = transform_to_2d(self.E, self.num_bloks)
 
     def setup(self, stage: Optional[str] = None):
         # transforming, splitting

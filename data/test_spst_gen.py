@@ -17,12 +17,15 @@ data_gen = SplitStepGenerator(batch_size=10,
                           z_stride=1000,
                           dim_t=2**12,
                           dispersion_compensate=True,
-                          num_bloks = 16)
-
-# a = torch.tensor([1, -1, 1, -1, -1]).view(1,5)
+                          num_bloks = 16,
+                          two_dim_data=True,
+                          pulse_amplitudes=None, # torch.tensor([1, -1, 1, -1, -1]).view(1,5)
+                          pulse_amplitudes_seed=42,
+                          )
 
 t0 = time.time()
-t, z, u = data_gen.prepare_data(two_dim_data=True, a=None)
+data_gen.prepare_data()
+t, z, u = data_gen.t, data_gen.z, data_gen.E
 print(time.time() - t0)
 
 t_start, t_end = data_gen.t_window
