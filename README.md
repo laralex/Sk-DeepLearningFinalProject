@@ -17,13 +17,13 @@ Inspired by the papers:
 
 ### Brief repository overview
 * 👉 [`train.py`](train.py) - entry point for training of models (see
-  **Reproduce training** section)
+  **Reproduce training and inference** section)
 * 👉 [`notebooks/training.ipynb`](notebooks/training.ipynb) - a quickstart Jupyter
   notebook for training or loading from a checkpoint
 * [`configs/`](configs/) - YAML files that define each experiment's parameters
 * [`data/`](data/) - definitions of datasets (either preloaded or generated)
 * [`materials/`](materials/) - supplementary materials like presentations, reports, plots
-* [`models/`](models/) - definitions of models and how their training process (optimizers, learning rate schedulers)
+* [`models/`](models/) - definitions of models and their training process (optimizers, learning rate schedulers)
 
 ### Requirements
 A GPU is recommended to perform the experiments. You can use [Google
@@ -32,9 +32,9 @@ Colab](colab.research.google.com) with Jupyter notebooks provided in
 
 Main prerequisites are:
 
-- [`pytorch`](http://pytorch.org/) - training
-- [`pytorch-lightning`](https://www.pytorchlightning.ai/) with [`LightningCLI`](https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_cli.html#lightningcli) - training
-- [`numpy`](https://anaconda.org/anaconda/numpy) - data generation
+- [`pytorch`](http://pytorch.org/) for models training
+- [`pytorch-lightning`](https://www.pytorchlightning.ai/) with [`LightningCLI`](https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_cli.html#lightningcli) for CLI tools and low-boilerplate models training
+- [`numpy`](https://anaconda.org/anaconda/numpy) for data generation
 
 Optional:
 - [`google-colab`](https://anaconda.org/conda-forge/google-colab) - if you want to mount a Google Drive to your Jupyter Notebook to store training artifacts
@@ -52,17 +52,19 @@ conda activate dyconv
 ```
 !>
 
-### Reproduce training
+### Reproduce training and inference
 The easiest way to start training of one of experiments listed in [`configs/`](configs/), is to run
 ```bash
 python train.py --config configs/your_chosen_experiment.yaml
 ```
 After that you'll find new folders `downloads/` with external downloaded files (like datasets) and `logs/` which will contain folders for each distinct experiment. Under each such experiment folder you'll find results of all the runs of this very same experiment, namely folders like `version_0/`, `version_1/`, etc, which would finally contain:
 - `config.yaml` with the parameters of the experiment for reproducibility (same parameters as in `your_chosen_experiment.yaml`)
-- `events...` file with logs of TensorBoard, ready to be visualized in it
+- `events.out.tfevents...` file with logs of TensorBoard, ready to be visualized in it
 - `checkpoints/` directory with the best epoch checkpoint and the lastest epoch ckeckpoint (you can use those to resume training from them, or load them for inference)
 
-A better approach to start training (or resuming or loading for inference), would be to use [`notebooks/training.ipynb`](notebooks/training.ipynb) Jupyter Notebook. In the first section you can set the parameters of further work. You're advised not to make further adjustments in other sections.
+A better approach to start training (or resuming or loading for inference), would be to use [`notebooks/training.ipynb`](notebooks/training.ipynb) Jupyter Notebook. In the first section you can set the parameters of further work. Other sections don't usually need any adjustments. After you "Run All" the notebook, either a training will start (a new one, or resumed), or only the model weights will be loaded (if you've chosen to `'load_model'`, see the notebook). 
+
+Anyway after the notebook has been run completely, you should be given `model` variable of type [`pytorch_lightning.LightningModule`](https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html#inference). You can do inference with it suing `model.forward(x)`.
 
 ### Experimental results
 ...
