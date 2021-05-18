@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader, random_split
 import pytorch_lightning as pl
 
-import numpy as np
+from math import pi, sqrt
 from torch.fft import fft, ifft
 
 class SplitStepGenerator(pl.LightningDataModule):
@@ -20,7 +20,7 @@ class SplitStepGenerator(pl.LightningDataModule):
                  z_stride: int,
                  dim_t: int,
                  dispersion_compensate: bool,
-                 num_bloks: int,
+                 num_blocks: int,
                  two_dim_data=False,
                  pulse_amplitudes=None,
                  pulse_amplitudes_seed=None,
@@ -37,7 +37,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.dim_z = int(z_end / (dz * z_stride)) + 1
         self.dim_t = dim_t
         self.dispersion_compensate = dispersion_compensate
-        self.num_bloks = num_bloks
+        self.num_blocks = num_blocks
         self.two_dim_data = two_dim_data
         self.pulse_amplitudes = pulse_amplitudes
         self.pulse_amplitudes_seed = pulse_amplitudes_seed
@@ -66,10 +66,10 @@ class SplitStepGenerator(pl.LightningDataModule):
         '''
         E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128)
         for k in range(1, self.seq_len + 1):
-            x = (a[:,k-1]/(np.pi**(1/4)*torch.sqrt(1 + 1j*z))).view(a.shape[0], 1)
+            x = (a[:,k-1]/(pi**(1/4)*torch.sqrt(1 + 1j*z))).view(a.shape[0], 1)
             y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
             
-            E0 = E0 + x*y
+            torch.add(E0, x.multiply(y), out=E0)
         return E0
     
     def split_step_solver(self, a, T, d, c, L):
@@ -98,14 +98,14 @@ class SplitStepGenerator(pl.LightningDataModule):
         '''
         z = torch.linspace(0, L, self.dim_z)
         
-        tMax = self.t_end + 5*np.sqrt(2*(1 + L**2))
+        tMax = self.t_end + 5*sqrt(2*(1 + L**2))
         tMin = -tMax
         
         dt = (tMax - tMin) / self.dim_t
         t = torch.linspace(tMin, tMax-dt, self.dim_t)
         
         # prepare frequencies
-        dw = 2*np.pi/(tMax - tMin)
+        dw = 2*pi/(tMax - tMin)
         w = dw*torch.cat((torch.arange(0, self.dim_t/2+1),
                           torch.arange(-self.dim_t/2+1, 0)))
         
@@ -127,7 +127,7 @@ class SplitStepGenerator(pl.LightningDataModule):
 
             if i % self.z_stride == 0:
                 n += 1
-                u[:,n,:] = buf
+                u[:, n, :] = buf
         
         # Dispersion compensation procedure (back propagation D**(-1))
         if self.dispersion_compensate:
@@ -177,18 +177,18 @@ class SplitStepGenerator(pl.LightningDataModule):
                                         c = self.nonlinearity,
                                         L = self.z_end)
         
-        self.t_window = [torch.abs(self.t-0).argmin(), torch.abs(self.t-self.t_end).argmin()]
+        self.t_window = [torch.abs(self.t).argmin(), torch.abs(self.t-self.t_end).argmin()]
         
         if self.two_dim_data:
-            self.E = transform_to_2d(self.E, self.num_bloks)
+            self.E = transform_to_2d(self.E, self.num_blocks)
 
     def setup(self, stage: Optional[str] = None):
         # transforming, splitting
         if stage is None or stage == "fit":
-            self.train = torch.zeros((1000, 1, 1))
-            self.val = torch.zeros((1000, 1, 1))
+            self.train = torch.zeros(1000, 1, 1)
+            self.val = torch.zeros(1000, 1, 1)
         if stage is None or stage == "test":
-            self.test = torch.zeros((1000, 1, 1))
+            self.test = torch.zeros(1000, 1, 1)
 
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster
@@ -201,13 +201,13 @@ class SplitStepGenerator(pl.LightningDataModule):
         return DataLoader(self.test, batch_size=self.batch_size, pin_memory=False)
 
 
-def transform_to_2d(data, num_bloks):
+def transform_to_2d(data, num_blocks):
     '''
     Parameters
     ----------
     data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t]
         DESCRIPTION: Output transmission line data with 1d-time.
-    num_bloks : TYPE: int
+    num_blocks : TYPE: int
         DESCRIPTION: The number of blocks into which the data will be split
         during transformation into 2d-time data. Time dimension is splitted
         on blocks and reshaped to 2d dimensions with overlaps.
@@ -218,13 +218,13 @@ def transform_to_2d(data, num_bloks):
         DESCRIPTION: Output transmission line data with padded 2d-time.
     '''
     bs, dim_z, dim_t = data.shape
-    dim_t_per_blok = int(dim_t/num_bloks)
-    data = data.view(bs, dim_z, num_bloks, dim_t_per_blok).transpose(-2,-1)
+    dim_t_per_block = dim_t//num_blocks
+    data = data.view(bs, dim_z, num_blocks, dim_t_per_block).transpose(-2, -1)
     
-    data_up = data[:, :, 0:int(dim_t_per_blok/2), 1:]
-    data_down = data[:, :, int(dim_t_per_blok/2):, 0:-1]
+    data_up = data[:, :, :dim_t_per_block//2, 1:]
+    data_down = data[:, :, dim_t_per_block//2:, :-1]
     
-    padd_zeros = torch.zeros(bs, dim_z, int(dim_t_per_blok/2), 1)
+    padd_zeros = torch.zeros(bs, dim_z, dim_t_per_block//2, 1)
     
     data_up = torch.cat((data_up, padd_zeros), dim=-1)
     data_down = torch.cat((padd_zeros, data_down), dim=-1)
@@ -249,6 +249,6 @@ def transform_to_1d(data):
         DESCRIPTION: Data with 1d-time.
     '''
     dim_padded_t = data.shape[-2]
-    data = data[:,:,int(dim_padded_t/4):int(dim_padded_t*3/4),:]
-    data = data.transpose(-2,-1).flatten(-2,-1)
+    data = data[:, :, dim_padded_t//4:dim_padded_t*3//4, :]
+    data = data.transpose(-2, -1).flatten(-2, -1)
     return data
