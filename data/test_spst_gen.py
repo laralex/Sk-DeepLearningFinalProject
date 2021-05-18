@@ -22,6 +22,7 @@ data_gen = SplitStepGenerator(batch_size=10,
                           n_val_batches = 0,
                           n_test_batches = 0,
                           two_dim_data=True,
+                          device='cpu',
                           pulse_amplitudes=None,
                           pulse_amplitudes_seed=42,
                           )

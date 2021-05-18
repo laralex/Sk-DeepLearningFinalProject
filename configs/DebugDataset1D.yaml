@@ -11,7 +11,7 @@ model:
 data:
   class_path: data.split_step_generator.SplitStepGenerator
   init_args:
-    batch_size: 5
+    batch_size: 10
     seq_len: 32
     dispersion: 0.5
     nonlinearity: 0.02
@@ -26,5 +26,6 @@ data:
     n_val_batches: 2
     n_test_batches: 2
     two_dim_data: false
+    device: available
     pulse_amplitudes: null
     pulse_amplitudes_seed: 42

@@ -26,7 +26,8 @@ class SplitStepGenerator(pl.LightningDataModule):
                  n_val_batches: int,
                  n_test_batches: int,
                  two_dim_data: bool,
-                 pulse_amplitudes: Optional[torch.FloatTensor] = None,
+                 device: Union[torch.device, str],
+                 pulse_amplitudes: Optional[torch.Tensor] = None,
                  pulse_amplitudes_seed: Optional[int] = None,
                  ):
         super().__init__()
@@ -46,7 +47,21 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.n_val_batches = n_val_batches
         self.n_test_batches = n_test_batches
         self.two_dim_data = two_dim_data
+
+        if isinstance(device, torch.device):
+            self.device = device
+        elif isinstance(device, str):
+            if device.startswith(('cuda', 'cpu')):
+                self.device = torch.device(device)
+            elif device == 'available':
+                self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            else:
+                raise ValueError("Incorrect value of device string")
+
         self.pulse_amplitudes = pulse_amplitudes
+        if isinstance(self.pulse_amplitudes, torch.Tensor):
+            self.pulse_amplitudes = self.pulse_amplitudes.to(device)
+
         self.pulse_amplitudes_seed = pulse_amplitudes_seed
         self.t_end = (seq_len + 1) * pulse_width
         
@@ -71,7 +86,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         E0 : TYPE: torch.complex128 tensor of shape [batch_size, dim_t]
             DESCRIPTION: Initial data at transmitting point (target).
         '''
-        E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128)
+        E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128, device=self.device)
         for k in range(1, self.seq_len + 1):
             x = (a[:,k-1]/(pi**(1/4)*torch.sqrt(1 + 1j*z))).view(a.shape[0], 1)
             y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
@@ -103,26 +118,26 @@ class SplitStepGenerator(pl.LightningDataModule):
         u : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t].
             DESCRIPTION: Output of the split-step solution.
         '''
-        z = torch.linspace(0, L, self.dim_z)
+        z = torch.linspace(0, L, self.dim_z, device=self.device)
         
         tMax = self.t_end + 5*sqrt(2*(1 + L**2))
         tMin = -tMax
         
         dt = (tMax - tMin) / self.dim_t
-        t = torch.linspace(tMin, tMax-dt, self.dim_t)
+        t = torch.linspace(tMin, tMax-dt, self.dim_t, device=self.device)
         
         # prepare frequencies
         dw = 2*pi/(tMax - tMin)
-        w = dw*torch.cat((torch.arange(0, self.dim_t/2+1),
-                          torch.arange(-self.dim_t/2+1, 0)))
+        w = dw*torch.cat((torch.arange(0, self.dim_t/2+1, device=self.device),
+                          torch.arange(-self.dim_t/2+1, 0, device=self.device)))
         
         # prepare linear propagator
         LP = torch.exp(-1j*d*self.dz/2*w**2)
         
         # Set initial condition
-        u = torch.zeros(a.shape[0], self.dim_z, self.dim_t, dtype=torch.complex128)
+        u = torch.zeros(a.shape[0], self.dim_z, self.dim_t, dtype=torch.complex128, device=self.device)
         
-        buf = self.Etanal(t, torch.tensor(0), a, T)
+        buf = self.Etanal(t, torch.tensor(0, device=self.device), a, T)
         u[:,0,:] = buf
         
         n = 0
