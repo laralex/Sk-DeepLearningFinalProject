@@ -88,7 +88,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         '''
         E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128, device=self.device)
         for k in range(1, self.seq_len + 1):
-            x = (a[:,k-1]/(pi**(1/4)*torch.sqrt(1 + 1j*z))).view(a.shape[0], 1)
+            x = (a[:,k-1]/(pi**(1/4)*torch.sqrt(1 + 1j*z).to(self.device))).view(a.shape[0], 1)
             y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
             
             torch.add(E0, x.multiply(y), out=E0)
@@ -191,8 +191,9 @@ class SplitStepGenerator(pl.LightningDataModule):
                 torch.random.manual_seed(self.pulse_amplitudes_seed)
             with context:
                 dataset_size = self.batch_size * (self.n_train_batches + self.n_val_batches + self.n_test_batches)
-                a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len)) - 3
+                a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len), device=self.device) - 3
         else:
+            a = a.to(self.device)
             self.seq_len = a.shape[-1]
             self.t_end = (self.seq_len + 1) * self.pulse_width
         
@@ -213,13 +214,15 @@ class SplitStepGenerator(pl.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         # transforming, splitting
+        # TODO(laralex): avoid moving data back to CPU (but otherwise CUDA
+        # crashes in SplitStepDataset)
         if stage is None or stage == "fit":
             train_end = self.batch_size*self.n_test_batches
-            self.train = self.E[:train_end, ...].transpose(0, 1)
+            self.train = self.E[:train_end, ...].transpose(0, 1).to('cpu')
             val_end = train_end + self.batch_size*self.n_val_batches
-            self.val = self.E[train_end:val_end, ...].transpose(0, 1)
+            self.val = self.E[train_end:val_end, ...].transpose(0, 1).to('cpu')
         if stage is None or stage == "test":
-            self.test = self.E[val_end:, ...].transpose(0, 1)
+            self.test = self.E[val_end:, ...].transpose(0, 1).to('cpu')
 
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster
@@ -258,7 +261,7 @@ def transform_to_2d(data, num_blocks):
     data_up = data[:, :, :dim_t_per_block//2, 1:]
     data_down = data[:, :, dim_t_per_block//2:, :-1]
     
-    padd_zeros = torch.zeros(bs, dim_z, dim_t_per_block//2, 1)
+    padd_zeros = torch.zeros(bs, dim_z, dim_t_per_block//2, 1, device=data.device)
     
     data_up = torch.cat((data_up, padd_zeros), dim=-1)
     data_down = torch.cat((padd_zeros, data_down), dim=-1)
