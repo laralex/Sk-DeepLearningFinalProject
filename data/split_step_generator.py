@@ -1,8 +1,9 @@
 from typing import Any, Dict, Optional, Type, Union
+import time
 import contextlib
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Dataset, random_split
 import pytorch_lightning as pl
 
 from math import pi, sqrt
@@ -21,9 +22,12 @@ class SplitStepGenerator(pl.LightningDataModule):
                  dim_t: int,
                  dispersion_compensate: bool,
                  num_blocks: int,
-                 two_dim_data=False,
-                 pulse_amplitudes=None,
-                 pulse_amplitudes_seed=None,
+                 n_train_batches: int,
+                 n_val_batches: int,
+                 n_test_batches: int,
+                 two_dim_data: bool,
+                 pulse_amplitudes: Optional[torch.FloatTensor] = None,
+                 pulse_amplitudes_seed: Optional[int] = None,
                  ):
         super().__init__()
         self.batch_size = batch_size
@@ -38,6 +42,9 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.dim_t = dim_t
         self.dispersion_compensate = dispersion_compensate
         self.num_blocks = num_blocks
+        self.n_train_batches = n_train_batches
+        self.n_val_batches = n_val_batches
+        self.n_test_batches = n_test_batches
         self.two_dim_data = two_dim_data
         self.pulse_amplitudes = pulse_amplitudes
         self.pulse_amplitudes_seed = pulse_amplitudes_seed
@@ -113,7 +120,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         LP = torch.exp(-1j*d*self.dz/2*w**2)
         
         # Set initial condition
-        u = torch.zeros(self.batch_size, self.dim_z, self.dim_t, dtype=torch.complex128)
+        u = torch.zeros(a.shape[0], self.dim_z, self.dim_t, dtype=torch.complex128)
         
         buf = self.Etanal(t, torch.tensor(0), a, T)
         u[:,0,:] = buf
@@ -155,6 +162,9 @@ class SplitStepGenerator(pl.LightningDataModule):
             Shape in case of 2d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
             DESCRIPTION: Output transmission line data.
         '''
+        print('Generating the dataset using Split-Step')
+        start_time = time.time()
+
         a = self.pulse_amplitudes
 
         if a is None:
@@ -165,11 +175,13 @@ class SplitStepGenerator(pl.LightningDataModule):
                 context = torch.random.fork_rng()
                 torch.random.manual_seed(self.pulse_amplitudes_seed)
             with context:
-                a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len)) - 3
+                dataset_size = self.batch_size * (self.n_train_batches + self.n_val_batches + self.n_test_batches)
+                a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len)) - 3
         else:
             self.seq_len = a.shape[-1]
             self.t_end = (self.seq_len + 1) * self.pulse_width
         
+        # TODO(laralex): consider dropping intermediate z (keep only z=0 and z=z_end)
         self.t, self.z, self.E = self.split_step_solver(
                                         a = a,
                                         T = self.pulse_width,
@@ -181,24 +193,31 @@ class SplitStepGenerator(pl.LightningDataModule):
         
         if self.two_dim_data:
             self.E = transform_to_2d(self.E, self.num_blocks)
+        end_time = time.time()
+        print(f'Dataset was generated in {int(end_time - start_time)} sec')
 
     def setup(self, stage: Optional[str] = None):
         # transforming, splitting
         if stage is None or stage == "fit":
-            self.train = torch.zeros(1000, 1, 1)
-            self.val = torch.zeros(1000, 1, 1)
+            train_end = self.batch_size*self.n_test_batches
+            self.train = self.E[:train_end, ...].transpose(0, 1)
+            val_end = train_end + self.batch_size*self.n_val_batches
+            self.val = self.E[train_end:val_end, ...].transpose(0, 1)
         if stage is None or stage == "test":
-            self.test = torch.zeros(1000, 1, 1)
+            self.test = self.E[val_end:, ...].transpose(0, 1)
 
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster
-        return DataLoader(self.train, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(SplitStepDataset(self.train),
+            batch_size=self.batch_size, pin_memory=False, shuffle=True, num_workers=3)
 
     def val_dataloader(self):
-        return DataLoader(self.val, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(SplitStepDataset(self.val),
+            batch_size=self.batch_size, pin_memory=False, num_workers=3)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=self.batch_size, pin_memory=False)
+        return DataLoader(SplitStepDataset(self.test),
+            batch_size=self.batch_size, pin_memory=False, num_workers=3)
 
 
 def transform_to_2d(data, num_blocks):
@@ -252,3 +271,21 @@ def transform_to_1d(data):
     data = data[:, :, dim_padded_t//4:dim_padded_t*3//4, :]
     data = data.transpose(-2, -1).flatten(-2, -1)
     return data
+
+# TODO(laralex): consider IterableDataset
+class SplitStepDataset(Dataset):
+    def __init__(self, dataset_content):
+        super().__init__()
+        self.dataset_content = dataset_content
+
+    # get sample
+    def __getitem__(self, idx):
+        dataset_part = self.dataset_content[:, idx, ...]
+        # TODO(laralex): some models require size [bs, ch, seq], not [bs, seq]
+        # (or for 2d [bs, ch, h, w])
+        input_ = dataset_part[0, ...].unsqueeze(0)
+        target_ = dataset_part[-1, ...].unsqueeze(0)
+        return input_, target_
+
+    def __len__(self):
+        return self.dataset_content.shape[1]
