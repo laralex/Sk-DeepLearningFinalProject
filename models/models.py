@@ -1,0 +1,129 @@
+from os import pread
+from typing import Any, Dict
+import torch
+from torch import nn, per_tensor_affine
+import pytorch_lightning as pl
+from torch.optim.optimizer import Optimizer
+import torchmetrics
+from typing import Any, Dict, Optional, Type, Union
+
+
+class FC_regressor(pl.LightningModule):
+    def __init__(
+        self, 
+        in_features: int,
+        layers: int, 
+        sizes:list = None, 
+        bias = False, 
+
+        optimizer:str = 'Adam',
+        optimizer_kwargs: Dict[str, Any] = {'lr':1e-4},
+        scheduler: str = 'StepLR',
+        scheduler_kwargs: Dict[str, Any] = {'step_size':10},
+        # TODO: also we can define criterion here
+        ):
+        super().__init__()
+        #model's params
+        self.optimizer = optimizer
+        self.optimizer_kwargs = optimizer_kwargs
+        self.scheduler = scheduler
+        self.scheduler_kwargs = scheduler_kwargs
+
+        self.net = FC_model(in_features, layers, sizes, bias)
+        # other params
+        self.criterion = nn.MSELoss()
+        self.train_accuracy = torchmetrics.Accuracy()
+        self.val_accuracy = torchmetrics.Accuracy()
+
+
+    def forward(self, x):
+        return self.net(x)
+
+
+    def training_step(self, batch, batch_idx):
+        data, target = batch
+        preds = self.forward(data)
+
+        loss = self.criterion(preds, target)
+        self.log("loss_train", loss, prog_bar = False, logger = True)
+        return {"loss":loss, "preds": preds, "target": target}
+
+
+    def validation_step(self, batch, batch_idx):
+        data, target = batch
+        preds = self.forward(data)
+
+        return {'preds':preds , 'target': target}
+
+
+    def configure_optimizers(self):
+        OptimizerClass = getattr(torch.optim, self.optimizer)
+        SchedulerClass = getattr(torch.optim.lr_scheduler, self.scheduler)
+        opt = OptimizerClass(self.parameters(), **self.optimizer_kwargs)
+        sch = SchedulerClass(opt, **self.scheduler_kwargs)
+
+        return [opt], [sch]
+
+
+    def training_epoch_end(self, outputs):
+        preds = torch.cat([r['preds'] for r in outputs], dim=0)
+        targets = torch.cat([r['target'] for r in outputs], dim=0)
+        self.train_accuracy(preds, targets)
+        self.log('accuracy_train', self.train_accuracy, prog_bar = True, logger = True)
+    
+
+    def validation_epoch_end(self, outputs):
+        preds = torch.cat([r['preds'] for r in outputs], dim=0)
+        targets = torch.cat([r['target'] for r in outputs], dim=0)
+
+        self.val_accuracy(preds, targets)
+        self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
+
+
+
+class FC_model(torch.nn.Module):
+    '''
+    Model with linear (fully connected) layers only.
+    Number of layers and sizes can be tuned.
+    '''
+    
+    def __init__(self, in_features: int, layers: int, sizes:list = None, bias = False):
+        '''
+        @in_features - number of features in input vector
+        @layers - number of linear layers in model
+        @sizes - list of output features for linear layers. 
+            if @sizes == None : uses @in_features for all layers instead
+        @bias - whether to use bias for linear layers or not
+        '''
+        super(FC_model, self).__init__()
+        # check if @sizes was defined 
+        if sizes != None:
+            # check if the @sizes has number of elements equal to number of layers
+            if len(sizes) != layers:
+                raise Exception('Number of sizes do not match to number of layers. Define sizes for all layers.')
+            self.sizes = sizes        
+        else:
+            # if @sizes == None: use @in_features for all layers
+            self.sizes = [in_features for _ in range(layers)]
+
+        # Add input size to the begining of @sizes
+        self.sizes.insert(0, in_features)
+
+        # Number of layers and list of layers
+        self.n_layers = layers
+        self.layers = nn.ModuleList([])
+
+        # Adding linear layers to list
+        for idx in range(layers):
+            self.layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+        
+
+    def forward(self,x):
+        # forward prop for all layers 
+        for layer in self.layers:
+            x = layer(x)
+        
+        return x 
+
+
+
