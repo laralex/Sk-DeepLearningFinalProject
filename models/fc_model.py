@@ -26,14 +26,14 @@ class FC_regressor(pl.LightningModule):
 
         ):
         super().__init__()
-        #model's params
+
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
 
         self.net = FC_model(in_features, layers, sizes, bias)
-        # other params
+
         CriterionClass = getattr(models.loss_functions, criterion)
         self.criterion = CriterionClass()
         self.train_accuracy = torchmetrics.Accuracy()
@@ -83,6 +83,18 @@ class FC_regressor(pl.LightningModule):
         self.val_accuracy(preds, targets)
         self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
 
+    def get_configuration(self):
+        configuration = {
+            'n_layers': self.net.n_layers, 
+            'sizes': self.net.sizes,
+            'activation': self.net.activation_name, 
+            'criterion': str(self.criterion.__repr__())[:-2],
+            'optimizer': self.optimizer,
+            'optimizer_param': str(self.optimizer_kwargs), 
+            'scheduler': self.scheduler,
+            'scheduler_param': str(self.scheduler_kwargs)
+        }
+        return configuration
 
 
 class FC_model(torch.nn.Module):
@@ -119,6 +131,10 @@ class FC_model(torch.nn.Module):
 
         # Activation function
         ActivationClass = getattr(torch.nn, activation)
+
+        #parameters for saving configuaration
+        self.bias = bias
+        self.activation_name = activation
 
         # Adding linear layers and activations to list
         for idx in range(layers):
