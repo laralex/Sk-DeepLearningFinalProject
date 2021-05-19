@@ -2,6 +2,7 @@ from typing import Any, Dict
 import torch
 from torch import nn, per_tensor_affine
 import pytorch_lightning as pl
+from torch.nn.modules.activation import ReLU
 from torch.optim.optimizer import Optimizer
 import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
@@ -90,7 +91,7 @@ class FC_model(torch.nn.Module):
     Number of layers and sizes can be tuned.
     '''
     
-    def __init__(self, in_features: int, layers: int, sizes:list = None, bias = False):
+    def __init__(self, in_features: int, layers: int, sizes:list = None, bias = False, activation = 'ReLU'):
         '''
         @in_features - number of features in input vector
         @layers - number of linear layers in model
@@ -116,9 +117,13 @@ class FC_model(torch.nn.Module):
         self.n_layers = layers
         self.layers = nn.ModuleList([])
 
-        # Adding linear layers to list
+        # Activation function
+        ActivationClass = getattr(torch.nn, activation)
+
+        # Adding linear layers and activations to list
         for idx in range(layers):
             self.layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+            self.layers.append(ActivationClass())
         
 
     def forward(self,x):
