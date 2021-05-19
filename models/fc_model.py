@@ -2,9 +2,12 @@ from typing import Any, Dict
 import torch
 from torch import nn, per_tensor_affine
 import pytorch_lightning as pl
+from torch.nn.modules.activation import ReLU
 from torch.optim.optimizer import Optimizer
 import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
+import models
+from models.loss_functions import EVM
 
 
 class FC_regressor(pl.LightningModule):
@@ -19,18 +22,37 @@ class FC_regressor(pl.LightningModule):
         optimizer_kwargs: Dict[str, Any] = {'lr':1e-4},
         scheduler: str = 'StepLR',
         scheduler_kwargs: Dict[str, Any] = {'step_size':10},
-        # TODO: also we can define criterion here
+        criterion: str = 'EVM'
         ):
+        '''
+        in_features (int) - number of input features in model
+        layers (int) - number of layers in model
+        sizes (list) - number of output features for each layer. 
+            If sizes == None : in_features will be used instead.
+        bias (bool) - whether to use bias in linear layers or not.
+        
+        optimizer (str) - name of optimizer (ex. "Adam", "SGD")
+        optimizer_kwargs (dict) - parameters of optimizer (ex. {'lr':1e-4})
+        scheduler (str) - name of scheduler that will be used
+        scheduler_kwargs (dict) - parameters of scheduler
+        criterion (str) - Loss function that will be used for training. "MSE" or "EVM"
+        '''
+        
+
         super().__init__()
-        #model's params
+
         self.optimizer = optimizer
         self.optimizer_kwargs = optimizer_kwargs
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
 
         self.net = FC_model(in_features, layers, sizes, bias)
-        # other params
-        self.criterion = nn.MSELoss()
+
+        if criterion == 'MSE':
+            self.criterion = nn.MSELoss()
+        elif criterion == 'EVM':
+            self.criterion = EVM()
+
         self.train_accuracy = torchmetrics.Accuracy()
         self.val_accuracy = torchmetrics.Accuracy()
 
@@ -78,6 +100,22 @@ class FC_regressor(pl.LightningModule):
         self.val_accuracy(preds, targets)
         self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
 
+    def get_configuration(self):
+        '''
+        Returns dict of str with current configuration of the model.
+        Can be used for Logger.
+        '''
+        configuration = {
+            'n_layers': self.net.n_layers, 
+            'sizes': self.net.sizes,
+            'activation': self.net.activation_name, 
+            'criterion': str(self.criterion.__repr__())[:-2],
+            'optimizer': self.optimizer,
+            'optimizer_param': str(self.optimizer_kwargs)[1:-1], 
+            'scheduler': self.scheduler,
+            'scheduler_param': str(self.scheduler_kwargs)[1:-1]
+        }
+        return configuration
 
 
 class FC_model(torch.nn.Module):
@@ -86,7 +124,7 @@ class FC_model(torch.nn.Module):
     Number of layers and sizes can be tuned.
     '''
     
-    def __init__(self, in_features: int, layers: int, sizes:list = None, bias = False):
+    def __init__(self, in_features: int, layers: int, sizes:list = None, bias = False, activation = 'ReLU'):
         '''
         @in_features - number of features in input vector
         @layers - number of linear layers in model
@@ -112,9 +150,17 @@ class FC_model(torch.nn.Module):
         self.n_layers = layers
         self.layers = nn.ModuleList([])
 
-        # Adding linear layers to list
+        # Activation function
+        ActivationClass = getattr(torch.nn, activation)
+
+        #parameters for saving configuaration
+        self.bias = bias
+        self.activation_name = activation
+
+        # Adding linear layers and activations to list
         for idx in range(layers):
             self.layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+            self.layers.append(ActivationClass())
         
 
     def forward(self,x):
