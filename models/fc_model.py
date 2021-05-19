@@ -7,7 +7,7 @@ from torch.optim.optimizer import Optimizer
 import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
 import models
-import models.loss_functions
+from models.loss_functions import EVM
 
 
 class FC_regressor(pl.LightningModule):
@@ -48,8 +48,11 @@ class FC_regressor(pl.LightningModule):
 
         self.net = FC_model(in_features, layers, sizes, bias)
 
-        CriterionClass = getattr(models.loss_functions, criterion)
-        self.criterion = CriterionClass()
+        if criterion == 'MSE':
+            self.criterion = nn.MSELoss()
+        elif criterion == 'EVM':
+            self.criterion = EVM()
+
         self.train_accuracy = torchmetrics.Accuracy()
         self.val_accuracy = torchmetrics.Accuracy()
 

@@ -1,17 +1,6 @@
 import torch
 from torch import nn, Tensor
 
-class MSE(nn.MSELoss):
-    '''
-    Usual Mean squared error from pytorch
-    '''
-    def __init__(self):
-        super(MSE, self).__init__()
-    
-    def forward(self, input: Tensor, target: Tensor) -> Tensor:
-        return super().forward(input, target)
-
-
 class EVM(nn.Module):
     '''
     Error vector magnetude loss
