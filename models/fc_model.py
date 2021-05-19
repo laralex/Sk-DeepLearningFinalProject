@@ -5,6 +5,8 @@ import pytorch_lightning as pl
 from torch.optim.optimizer import Optimizer
 import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
+import models
+import models.loss_functions
 
 
 class FC_regressor(pl.LightningModule):
@@ -19,7 +21,8 @@ class FC_regressor(pl.LightningModule):
         optimizer_kwargs: Dict[str, Any] = {'lr':1e-4},
         scheduler: str = 'StepLR',
         scheduler_kwargs: Dict[str, Any] = {'step_size':10},
-        # TODO: also we can define criterion here
+        criterion: str = 'EVM'
+
         ):
         super().__init__()
         #model's params
@@ -30,7 +33,8 @@ class FC_regressor(pl.LightningModule):
 
         self.net = FC_model(in_features, layers, sizes, bias)
         # other params
-        self.criterion = nn.MSELoss()
+        CriterionClass = getattr(models.loss_functions, criterion)
+        self.criterion = CriterionClass()
         self.train_accuracy = torchmetrics.Accuracy()
         self.val_accuracy = torchmetrics.Accuracy()
 
