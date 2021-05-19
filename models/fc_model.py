@@ -23,8 +23,22 @@ class FC_regressor(pl.LightningModule):
         scheduler: str = 'StepLR',
         scheduler_kwargs: Dict[str, Any] = {'step_size':10},
         criterion: str = 'EVM'
-
         ):
+        '''
+        in_features (int) - number of input features in model
+        layers (int) - number of layers in model
+        sizes (list) - number of output features for each layer. 
+            If sizes == None : in_features will be used instead.
+        bias (bool) - whether to use bias in linear layers or not.
+        
+        optimizer (str) - name of optimizer (ex. "Adam", "SGD")
+        optimizer_kwargs (dict) - parameters of optimizer (ex. {'lr':1e-4})
+        scheduler (str) - name of scheduler that will be used
+        scheduler_kwargs (dict) - parameters of scheduler
+        criterion (str) - Loss function that will be used for training. "MSE" or "EVM"
+        '''
+        
+
         super().__init__()
 
         self.optimizer = optimizer
@@ -84,15 +98,19 @@ class FC_regressor(pl.LightningModule):
         self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
 
     def get_configuration(self):
+        '''
+        Returns dict of str with current configuration of the model.
+        Can be used for Logger.
+        '''
         configuration = {
             'n_layers': self.net.n_layers, 
             'sizes': self.net.sizes,
             'activation': self.net.activation_name, 
             'criterion': str(self.criterion.__repr__())[:-2],
             'optimizer': self.optimizer,
-            'optimizer_param': str(self.optimizer_kwargs), 
+            'optimizer_param': str(self.optimizer_kwargs)[1:-1], 
             'scheduler': self.scheduler,
-            'scheduler_param': str(self.scheduler_kwargs)
+            'scheduler_param': str(self.scheduler_kwargs)[1:-1]
         }
         return configuration
 
