@@ -64,9 +64,8 @@ class SplitStepGenerator(pl.LightningDataModule):
 
         self.pulse_amplitudes_seed = pulse_amplitudes_seed
         self.t_end = (seq_len + 1) * pulse_width
-        
         self.t_window = None
-    
+
     def Etanal(self, t, z, a, T):
         '''
         Parameters
@@ -87,11 +86,12 @@ class SplitStepGenerator(pl.LightningDataModule):
             DESCRIPTION: Initial data at transmitting point (target).
         '''
         E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128, device=self.device)
-        for k in range(1, self.seq_len + 1):
-            x = (a[:,k-1]/(pi**(1/4)*torch.sqrt(1 + 1j*z).to(self.device))).view(a.shape[0], 1)
-            y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
-            
-            torch.add(E0, x.multiply(y), out=E0)
+        complex_z = torch.as_tensor(1 + 1j*z, dtype=torch.complex128, device=self.device)
+        sequence_indices = torch.arange(1, self.seq_len + 1, device=self.device).view(-1, 1)
+        # [1, dim_t] minus [seq_len, 1] makes them broadcasted to [seq_len, dim_t]
+        y_whole = torch.exp(-(t.view(1, -1) - T * sequence_indices)**2 / (2*complex_z)) # [seq_len, dim_t]
+        x_whole = a/(pi**(1/4)*torch.sqrt(complex_z)) # [bs, seq_len]
+        torch.matmul(x_whole, y_whole, out=E0) # [bs, dim_t]
         return E0
     
     def split_step_solver(self, a, T, d, c, L):
