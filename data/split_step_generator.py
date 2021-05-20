@@ -1,6 +1,9 @@
 from typing import Any, Dict, Optional, Type, Union
 import time
 import contextlib
+import os
+from torch import tensor
+import yaml
 
 import torch
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -22,11 +25,12 @@ class SplitStepGenerator(pl.LightningDataModule):
                  dim_t: int,
                  dispersion_compensate: bool,
                  num_blocks: int,
-                 n_train_batches: int,
-                 n_val_batches: int,
-                 n_test_batches: int,
                  two_dim_data: bool,
-                 device: Union[torch.device, str],
+                 n_train_batches: Optional[int] = 0,
+                 n_val_batches: Optional[int] = 0,
+                 n_test_batches: Optional[int] = 0,
+                 dataset_root_path: Optional[str] = None,
+                 device: Union[torch.device, str] = 'available',
                  pulse_amplitudes: Optional[torch.Tensor] = None,
                  pulse_amplitudes_seed: Optional[int] = None,
                  ):
@@ -47,6 +51,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.n_val_batches = n_val_batches
         self.n_test_batches = n_test_batches
         self.two_dim_data = two_dim_data
+        self.dataset_root_path = dataset_root_path
 
         if isinstance(device, torch.device):
             self.device = device
@@ -65,6 +70,21 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.pulse_amplitudes_seed = pulse_amplitudes_seed
         self.t_end = ((seq_len - 1)//2 + 1) * pulse_width
         self.t_window = None
+
+        self.signal_hparams = {
+            'seq_len': self.seq_len,
+            'dispersion': self.dispersion,
+            'nonlinearity': self.nonlinearity,
+            'pulse_width': self.pulse_width,
+            'z_end': self.z_end,
+            'dz': self.dz,
+            'z_stride': self.z_stride,
+            'dim_z': self.dim_z,
+            'dim_t': self.dim_t,
+            'dispersion_compensate': self.dispersion_compensate,
+            'num_blocks': self.num_blocks,
+            'two_dim_data': self.two_dim_data,
+        }
 
     def Etanal(self, t, z, a, T):
         '''
@@ -160,6 +180,14 @@ class SplitStepGenerator(pl.LightningDataModule):
         return t, z, u
 
     def prepare_data(self):
+        if self.dataset_root_path is None:
+            self.generate_dataset()
+        else:
+            subdir = find_dataset_subdir(self.signal_hparams, self.dataset_root_path)
+            assert subdir is not None
+            self.train, self.val, self.test = load_from_subdir(subdir)
+
+    def generate_dataset(self):
         '''
         Direct signal propagation is performed through the split-step method.
         Optional: dispersion compensation and data transformation in 2d.
@@ -190,8 +218,11 @@ class SplitStepGenerator(pl.LightningDataModule):
             else:
                 context = torch.random.fork_rng()
                 torch.random.manual_seed(self.pulse_amplitudes_seed)
+            dataset_size = self.batch_size * (self.n_train_batches + self.n_val_batches + self.n_test_batches)
+            if dataset_size == 0:
+                self.t, self.z, self.E = None, None, None
+                return
             with context:
-                dataset_size = self.batch_size * (self.n_train_batches + self.n_val_batches + self.n_test_batches)
                 a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len), device=self.device) - 3
         else:
             a = a.to(self.device)
@@ -217,13 +248,15 @@ class SplitStepGenerator(pl.LightningDataModule):
         # transforming, splitting
         # TODO(laralex): avoid moving data back to CPU (but otherwise CUDA
         # crashes in SplitStepDataset)
-        if stage is None or stage == "fit":
-            train_end = self.batch_size*self.n_test_batches
-            self.train = self.E[:train_end, ...].transpose(0, 1).to('cpu')
-            val_end = train_end + self.batch_size*self.n_val_batches
-            self.val = self.E[train_end:val_end, ...].transpose(0, 1).to('cpu')
-        if stage is None or stage == "test":
-            self.test = self.E[val_end:, ...].transpose(0, 1).to('cpu')
+        if self.dataset_root_path is None:
+            if self.E is not None:
+                train_end = self.batch_size*self.n_train_batches
+                self.train = self.E[:train_end, ...].transpose(0, 1).to('cpu')
+                val_end = train_end + self.batch_size*self.n_val_batches
+                self.val = self.E[train_end:val_end, ...].transpose(0, 1).to('cpu')
+                self.test = self.E[val_end:, ...].transpose(0, 1).to('cpu')
+            else:
+                self.train, self.val, self.test = None, None, None
 
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster
@@ -290,6 +323,33 @@ def transform_to_1d(data):
     data = data[:, :, dim_padded_t//4:dim_padded_t*3//4, :]
     data = data.transpose(-2, -1).flatten(-2, -1)
     return data
+
+def find_dataset_subdir(params_dict, datasets_root):
+    version_root = None
+    for root, subdirs, _ in os.walk(datasets_root, topdown=False):
+        for version in subdirs:
+            candidate_yaml = f'{root}/{version}/signal_hparams.yaml'
+            if os.path.exists(candidate_yaml):
+                with open(candidate_yaml, 'r') as stream:
+                    candidate_hparams = yaml.safe_load(stream)
+                    if candidate_hparams == params_dict:
+                        return f'{root}/{version}'
+    return None
+
+def load_from_subdir(path):
+    assert os.path.exists(f'{path}/signal_hparams.yaml')
+    return concat_files(f'{path}/train'), concat_files(f'{path}/val'), concat_files(f'{path}/test')
+
+def concat_files(root_path):
+    assert os.path.exists(root_path)
+    files = [os.path.join(root_path, f) for f in os.listdir(root_path) if os.path.isfile(os.path.join(root_path, f))]
+    tensors = [torch.load(file) for file in files]
+    if len(tensors) > 1:
+        return torch.cat(tensors, dim=1)
+    elif len(tensors) == 1:
+        return tensors[0]
+    else:
+        return None
 
 # TODO(laralex): consider IterableDataset
 class SplitStepDataset(Dataset):
