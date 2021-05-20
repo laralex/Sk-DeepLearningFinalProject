@@ -63,7 +63,7 @@ class SplitStepGenerator(pl.LightningDataModule):
             self.pulse_amplitudes = self.pulse_amplitudes.to(device)
 
         self.pulse_amplitudes_seed = pulse_amplitudes_seed
-        self.t_end = (seq_len + 1) * pulse_width
+        self.t_end = ((seq_len - 1)//2 + 1) * pulse_width
         self.t_window = None
 
     def Etanal(self, t, z, a, T):
@@ -87,7 +87,8 @@ class SplitStepGenerator(pl.LightningDataModule):
         '''
         E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128, device=self.device)
         complex_z = torch.as_tensor(1 + 1j*z, dtype=torch.complex128, device=self.device)
-        sequence_indices = torch.arange(1, self.seq_len + 1, device=self.device).view(-1, 1)
+        half_seq_len = (self.seq_len - 1)//2
+        sequence_indices = torch.arange(-half_seq_len, half_seq_len + 1, device=self.device).view(-1, 1)
         # [1, dim_t] minus [seq_len, 1] makes them broadcasted to [seq_len, dim_t]
         y_whole = torch.exp(-(t.view(1, -1) - T * sequence_indices)**2 / (2*complex_z)) # [seq_len, dim_t]
         x_whole = a/(pi**(1/4)*torch.sqrt(complex_z)) # [bs, seq_len]
@@ -120,7 +121,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         '''
         z = torch.linspace(0, L, self.dim_z, device=self.device)
         
-        tMax = self.t_end + 5*sqrt(2*(1 + L**2))
+        tMax = self.t_end + 4*sqrt(2*(1 + L**2))
         tMin = -tMax
         
         dt = (tMax - tMin) / self.dim_t
@@ -195,7 +196,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         else:
             a = a.to(self.device)
             self.seq_len = a.shape[-1]
-            self.t_end = (self.seq_len + 1) * self.pulse_width
+            self.t_end = ((self.seq_len - 1)//2 + 1) * self.pulse_width
         
         # TODO(laralex): consider dropping intermediate z (keep only z=0 and z=z_end)
         self.t, self.z, self.E = self.split_step_solver(
@@ -205,7 +206,7 @@ class SplitStepGenerator(pl.LightningDataModule):
                                         c = self.nonlinearity,
                                         L = self.z_end)
         
-        self.t_window = [torch.abs(self.t).argmin(), torch.abs(self.t-self.t_end).argmin()]
+        self.t_window = [torch.abs(self.t+self.t_end).argmin(), torch.abs(self.t-self.t_end).argmin()]
         
         if self.two_dim_data:
             self.E = transform_to_2d(self.E, self.num_blocks)
