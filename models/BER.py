@@ -187,7 +187,7 @@ l
         target = decoded_bitSeq[:,0,:]
         pred = decoded_bitSeq[:,-1,:]
         n = target.size(-1)
-        ber_value = torch.sum(target == pred)/(target.numel())
+        ber_value = torch.sum(target != pred)/(target.numel())
         return ber_value
 
 
@@ -276,8 +276,7 @@ l
 
         return ber_value
 
-  #function for matiric
-  def input_to_output(self, preds: torch.Tensor, target: torch.Tensor):
+  def to_bitSeq(self, preds: torch.Tensor, target: torch.Tensor):
         '''
         Parameters
         ----------
@@ -336,14 +335,14 @@ class BERMetric(Metric):
                                t, t_window)
         
     def _input_format(self, preds, target):
-        preds, target = self.BEREstimater.input_to_output(preds, target)
+        preds, target = self.BEREstimater.to_bitSeq(preds, target)
         return preds, target
         
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         preds, target = self._input_format(preds, target)
         assert preds.shape == target.shape
 
-        self.correct += torch.sum(preds == target)
+        self.correct += torch.sum(preds != target)
         self.total += target.numel()
 
     def compute(self):
