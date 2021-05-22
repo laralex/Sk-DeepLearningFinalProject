@@ -16,13 +16,14 @@ data_gen = SplitStepGenerator(batch_size=10,
                           dim_t=2**16,
                           dispersion_compensate=True,
                           num_blocks = 32,
-                          n_train_batches = 1,
-                          n_val_batches = 0,
-                          n_test_batches = 0,
+                          generate_n_train_batches = 1,
+                          generate_n_val_batches = 0,
+                          generate_n_test_batches = 0,
                           two_dim_data=True,
                           device='cpu',
                           pulse_amplitudes=None,
                           pulse_amplitudes_seed=42,
+                          complex_type_size=64,
                           )
 
 data_gen.prepare_data()
