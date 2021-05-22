@@ -17,7 +17,7 @@ class CustomLightningCLI(LightningCLI):
             self.config = self.parser.parse_path(self.config_path)
         else:
             self.config = self.parser.parse_args()
-        self.config['load_dataset_root_path'] = self.dataset_root_path
+        self.config['data']['init_args']['load_dataset_root_path'] = self.dataset_root_path
 
     def add_arguments_to_parser(self, parser):
         parser.add_argument('--experiment_name', default='DefaultModel')
