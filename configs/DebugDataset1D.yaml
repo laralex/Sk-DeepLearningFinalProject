@@ -26,3 +26,4 @@ data:
     device: available
     data_source_type: filesystem
     load_dataset_root_path: None
+    complex_type_size: 64

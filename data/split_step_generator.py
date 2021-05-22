@@ -32,10 +32,11 @@ class SplitStepGenerator(pl.LightningDataModule):
                  generate_n_val_batches: Optional[int] = 0,
                  generate_n_test_batches: Optional[int] = 0,
                  load_dataset_root_path: Optional[str] = None,
-                 data_source_type: str = 'generate',
+                 data_source_type: str = 'generation',
                  device: Union[torch.device, str] = 'available',
                  pulse_amplitudes: Optional[torch.Tensor] = None,
                  pulse_amplitudes_seed: Optional[int] = None,
+                 complex_type_size: int = 128
                  ):
         super().__init__()
         self.batch_size = batch_size
@@ -75,6 +76,15 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.t_end = ((seq_len - 1)//2 + 1) * pulse_width
         self.t_window = None
 
+        if complex_type_size == 128:
+            self.complex_type = torch.complex128
+        elif complex_type_size == 64:
+            self.complex_type = torch.complex64
+        elif complex_type_size == 32:
+            self.complex_type = torch.complex32
+        else:
+            raise ValueError("complex_type_size has to be 128 or 64 or 32")
+
         self.signal_hparams = {
             'seq_len': self.seq_len,
             'dispersion': self.dispersion,
@@ -109,8 +119,8 @@ class SplitStepGenerator(pl.LightningDataModule):
         E0 : TYPE: torch.complex128 tensor of shape [batch_size, dim_t]
             DESCRIPTION: Initial data at transmitting point (target).
         '''
-        E0 = torch.zeros(a.shape[0], self.dim_t, dtype=torch.complex128, device=self.device)
-        complex_z = torch.as_tensor(1 + 1j*z, dtype=torch.complex128, device=self.device)
+        E0 = torch.zeros(a.shape[0], self.dim_t, dtype=self.complex_type, device=self.device)
+        complex_z = torch.as_tensor(1 + 1j*z, dtype=self.complex_type, device=self.device)
         half_seq_len = (self.seq_len - 1)//2
         sequence_indices = torch.arange(-half_seq_len, half_seq_len + 1, device=self.device).view(-1, 1)
         # [1, dim_t] minus [seq_len, 1] makes them broadcasted to [seq_len, dim_t]
@@ -160,7 +170,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         LP = torch.exp(-1j*d*self.dz/2*w**2)
         
         # Set initial condition
-        u = torch.zeros(a.shape[0], self.dim_z, self.dim_t, dtype=torch.complex128, device=self.device)
+        u = torch.zeros(a.shape[0], self.dim_z, self.dim_t, dtype=self.complex_type, device=self.device)
         
         buf = self.Etanal(t, torch.tensor(0, device=self.device), a, T)
         u[:,0,:] = buf
@@ -190,7 +200,7 @@ class SplitStepGenerator(pl.LightningDataModule):
             assert self.load_dataset_root_path is not None, "Path to load the dataset isn't specified through config or command line args"
             subdir = find_dataset_subdir(self.signal_hparams, self.load_dataset_root_path)
             assert subdir is not None, "Trying to load non already generated dataset"
-            self.train, self.val, self.test = load_from_subdir(subdir)
+            self.train, self.val, self.test = load_from_subdir(subdir, self.complex_type)
         else:
             raise ValueError(self.data_source_type)
 
@@ -347,14 +357,14 @@ def find_dataset_subdir(params_dict, datasets_root):
                         return root/version
     return None
 
-def load_from_subdir(path):
+def load_from_subdir(path, data_type):
     assert os.path.exists(path/'signal_hparams.yaml')
-    return concat_files(path/'train'), concat_files(path/'val'), concat_files(path/'test')
+    return concat_files(path/'train', data_type), concat_files(path/'val', data_type), concat_files(path/'test', data_type)
 
-def concat_files(root_path):
+def concat_files(root_path, data_type):
     assert os.path.exists(root_path)
     files = [os.path.join(root_path, f) for f in os.listdir(root_path) if os.path.isfile(os.path.join(root_path, f))]
-    tensors = [torch.load(file) for file in files]
+    tensors = [torch.load(file).type(data_type) for file in files]
     if len(tensors) > 1:
         return torch.cat(tensors, dim=1)
     elif len(tensors) == 1:

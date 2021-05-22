@@ -23,6 +23,7 @@ data_gen = SplitStepGenerator(batch_size=10,
                           device='cpu',
                           pulse_amplitudes=None,
                           pulse_amplitudes_seed=42,
+                          complex_type_size=64,
                           )
 
 data_gen.prepare_data()
