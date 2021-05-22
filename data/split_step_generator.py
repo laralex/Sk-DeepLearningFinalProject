@@ -1,11 +1,10 @@
+import utils.files
+from data.transform_1d_2d import *
+
 from typing import Any, Dict, Optional, Type, Union
 import time
 import contextlib
-import os
 from torch import tensor
-import yaml
-from tqdm import tqdm
-from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -198,9 +197,9 @@ class SplitStepGenerator(pl.LightningDataModule):
             self.generate_dataset()
         elif self.data_source_type == 'filesystem':
             assert self.load_dataset_root_path is not None, "Path to load the dataset isn't specified through config or command line args"
-            subdir = find_dataset_subdir(self.signal_hparams, self.load_dataset_root_path)
+            subdir = utils.files.find_dataset_subdir(self.signal_hparams, self.load_dataset_root_path)
             assert subdir is not None, "Trying to load non already generated dataset"
-            self.train, self.val, self.test = load_from_subdir(subdir, self.complex_type)
+            self.train, self.val, self.test = utils.files.load_from_subdir(subdir, self.complex_type)
         else:
             raise ValueError(self.data_source_type)
 
@@ -241,7 +240,7 @@ class SplitStepGenerator(pl.LightningDataModule):
                 return
             with context:
                 a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len), device=self.device) - 3
-            print(f'Generating random sequence of amplitudes, seed {self.pulse_amplitudes_seed}, {a[:2][:8]}')
+            print(f'Generating random sequence of amplitudes, seed {self.pulse_amplitudes_seed}, {a[0][:8]}')
         else:
             a = a.to(self.device)
             self.seq_len = a.shape[-1]
@@ -267,7 +266,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         # transforming, splitting
         # TODO(laralex): avoid moving data back to CPU (but otherwise CUDA
         # crashes in SplitStepDataset)
-        if self.load_dataset_root_path is None:
+        if self.data_source_type == 'generation':
             if self.E is not None:
                 train_end = self.batch_size*self.generate_n_train_batches
                 self.train = self.E[:train_end, ...].transpose(0, 1).to('cpu')
@@ -292,85 +291,6 @@ class SplitStepGenerator(pl.LightningDataModule):
             batch_size=self.batch_size, pin_memory=False, num_workers=3)
 
 
-def transform_to_2d(data, num_blocks):
-    '''
-    Parameters
-    ----------
-    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t]
-        DESCRIPTION: Output transmission line data with 1d-time.
-    num_blocks : TYPE: int
-        DESCRIPTION: The number of blocks into which the data will be split
-        during transformation into 2d-time data. Time dimension is splitted
-        on blocks and reshaped to 2d dimensions with overlaps.
-
-    Returns
-    -------
-    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, 2*dim_t_per_blok, num_bloks]
-        DESCRIPTION: Output transmission line data with padded 2d-time.
-    '''
-    bs, dim_z, dim_t = data.shape
-    dim_t_per_block = dim_t//num_blocks
-    data = data.view(bs, dim_z, num_blocks, dim_t_per_block).transpose(-2, -1)
-    
-    data_up = data[:, :, :dim_t_per_block//2, 1:]
-    data_down = data[:, :, dim_t_per_block//2:, :-1]
-    
-    padd_zeros = torch.zeros(bs, dim_z, dim_t_per_block//2, 1, device=data.device)
-    
-    data_up = torch.cat((data_up, padd_zeros), dim=-1)
-    data_down = torch.cat((padd_zeros, data_down), dim=-1)
-    
-    data = torch.cat((data_down, data), dim=-2)
-    data = torch.cat((data, data_up), dim=-2)
-    
-    return data
-
-def transform_to_1d(data):
-    '''
-    Reverse operation to transform_to_2d
-    
-    Parameters
-    ----------
-    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, 2*dim_t_per_blok, num_bloks]
-        DESCRIPTION: Data with 2d-time.
-
-    Returns
-    -------
-    data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t]
-        DESCRIPTION: Data with 1d-time.
-    '''
-    dim_padded_t = data.shape[-2]
-    data = data[:, :, dim_padded_t//4:dim_padded_t*3//4, :]
-    data = data.transpose(-2, -1).flatten(-2, -1)
-    return data
-
-def find_dataset_subdir(params_dict, datasets_root):
-    version_root = None
-    for root, subdirs, _ in os.walk(datasets_root, topdown=False):
-        for version in subdirs:
-            root = Path(root)
-            candidate_yaml = root/version/'signal_hparams.yaml'
-            if os.path.exists(candidate_yaml):
-                with open(candidate_yaml, 'r') as stream:
-                    candidate_hparams = yaml.safe_load(stream)
-                    if candidate_hparams == params_dict:
-                        return root/version
-    return None
-
-def load_from_subdir(path, data_type):
-    assert os.path.exists(path/'signal_hparams.yaml')
-    return concat_files(path/'train', data_type), concat_files(path/'val', data_type), concat_files(path/'test', data_type)
-
-def concat_files(root_path, data_type):
-    assert os.path.exists(root_path)
-    files = [os.path.join(root_path, f) for f in os.listdir(root_path) if os.path.isfile(os.path.join(root_path, f))]
-    tensors = [torch.load(file).type(data_type) for file in files]
-    if len(tensors) > 1:
-        return torch.cat(tensors, dim=1)
-    elif len(tensors) == 1:
-        return tensors[0]
-    else:
-        return None
 
 # TODO(laralex): consider IterableDataset
 class SplitStepDataset(Dataset):
