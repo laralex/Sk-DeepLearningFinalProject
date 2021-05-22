@@ -17,7 +17,8 @@ class CustomLightningCLI(LightningCLI):
             self.config = self.parser.parse_path(self.config_path)
         else:
             self.config = self.parser.parse_args()
-        self.config['data']['init_args']['load_dataset_root_path'] = self.dataset_root_path
+        if 'load_dataset_root_path' in self.config['data']['init_args']:
+            self.config['data']['init_args']['load_dataset_root_path'] = self.dataset_root_path
 
     def add_arguments_to_parser(self, parser):
         parser.add_argument('--experiment_name', default='DefaultModel')
@@ -45,6 +46,7 @@ class CustomLightningCLI(LightningCLI):
         self.trainer.callbacks.append(callback)
 
     def fit(self):
+        print(f'Loading the dataset from {self.dataset_root_path}')
         if self.do_fit:
             super().fit()
 
