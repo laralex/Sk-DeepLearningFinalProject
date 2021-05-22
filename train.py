@@ -4,11 +4,12 @@ import pytorch_lightning as pl
 from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
 
 class CustomLightningCLI(LightningCLI):
-    def __init__(self, root_dir, config_path, *args, do_fit=True, version=None, **kwargs):
+    def __init__(self, root_dir, config_path, *args, do_fit=True, version=None, dataset_root_path=None, **kwargs):
         self.root_dir = root_dir
         self.config_path = config_path
         self.do_fit = do_fit
         self.version = version
+        self.dataset_root_path = dataset_root_path
         super().__init__(*args, **kwargs)
 
     def parse_arguments(self):
@@ -16,6 +17,7 @@ class CustomLightningCLI(LightningCLI):
             self.config = self.parser.parse_path(self.config_path)
         else:
             self.config = self.parser.parse_args()
+        self.config['load_dataset_root_path'] = self.dataset_root_path
 
     def add_arguments_to_parser(self, parser):
         parser.add_argument('--experiment_name', default='DefaultModel')
@@ -46,7 +48,7 @@ class CustomLightningCLI(LightningCLI):
         if self.do_fit:
             super().fit()
 
-def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None):
+def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, dataset_root_path=None):
     """
     root_dir: absolute path to where to put logs/ directory
     config_path: absolute path to a file with configuration in YAML format
@@ -75,6 +77,7 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None):
             config_path,
             pl.LightningModule,
             pl.LightningDataModule,
+            dataset_root_path=dataset_root_path,
             do_fit=do_fit,
             version=version,
             trainer_defaults=trainer_defaults,
