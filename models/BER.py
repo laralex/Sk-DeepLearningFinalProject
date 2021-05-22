@@ -1,9 +1,10 @@
 import torch
 from torchmetrics import Metric
+from scipy import special
 
 #BER estimation realised as a nn.Module
 class BEREstimater(torch.nn.Module):
-  def __init__(self, decision_level=None, pulse_number=None, pulse_width=None,
+    def __init__(self, decision_level=None, pulse_number=None, pulse_width=None,
                t=None, t_window=None ):
         '''
 
@@ -31,25 +32,25 @@ class BEREstimater(torch.nn.Module):
         t_window : TYPE: list [torch.int64,torch.int64]
             DESCRIPTION: Contain t_start and t_end to select
             time (negative and positive) with pulses from t. 
-l
+    l
         '''
-               
+
         super().__init__()
         self.setup(decision_level, pulse_number, pulse_width, t, t_window)
 
-  def setup(self, decision_level=None, pulse_number=None, pulse_width=None,
+    def setup(self, decision_level=None, pulse_number=None, pulse_width=None,
             t=None, t_window=None):
         if decision_level is not None:
-          self.decision_level = decision_level
+            self.decision_level = decision_level
         if pulse_number is not None:
-          self.pulse_number = pulse_number
+            self.pulse_number = pulse_number
         if pulse_width is not None:
-          self.pulse_width = pulse_width
+            self.pulse_width = pulse_width
         if t is not None:
-          self.register_parameter('t', torch.nn.Parameter(t,
+            self.register_parameter('t', torch.nn.Parameter(t,
                                                      requires_grad=False))
         if t_window is not None:
-          self.t_window = t_window
+            self.t_window = t_window
 
 
   ### Component  funtions   
@@ -110,7 +111,7 @@ l
         return u, u_shifted, signal_decoded.real, t_dec
 
 
-  def decod_bit_seq(self, signal_decoded, t_dec, pulse_width,
+    def decod_bit_seq(self, signal_decoded, t_dec, pulse_width,
                     pulse_number, decision_level):
         '''
         Parameters
@@ -165,7 +166,7 @@ l
         return decoded_bitSeq
 
 
-  def do_BER(self, decoded_bitSeq):
+    def do_BER(self, decoded_bitSeq):
         '''
         DESCRIPTION
         ----------
@@ -191,7 +192,7 @@ l
         return ber_value
 
 
-  def signal_to_bitSeq(self, signal: torch.Tensor):
+    def signal_to_bitSeq(self, signal: torch.Tensor):
         '''
         Parameters
         ----------
@@ -207,7 +208,7 @@ l
         # Decoding
         _, _, decoded_signal, t_decoder = self.decod_signal(signal, self.pulse_width,
                                                        self.t, self.t_window)
-        
+
         # Getting bit sequence
         decoded_bitSeq = self.decod_bit_seq(decoded_signal, t_decoder,
                                             self.pulse_width, self.pulse_number,
@@ -250,7 +251,7 @@ l
         return ber_value
 
 
-  def forward(self, preds: torch.Tensor, targets: torch.Tensor):
+    def forward(self, preds: torch.Tensor, targets: torch.Tensor):
         '''
         Parameters
         ----------
@@ -263,20 +264,20 @@ l
         -------
         BER_value : TYPE: float
             DESCRIPTION: estimated BER value
-            
+
         '''
 
         #concatenation
         z_dim = 1
         signal = torch.cat([targets.unsqueeze(z_dim), preds.unsqueeze(z_dim)],
                            dim=z_dim)
-        
+
         # Getting BER value
         ber_value = self.forward_signal(signal)
 
         return ber_value
 
-  def to_bitSeq(self, preds: torch.Tensor, target: torch.Tensor):
+    def to_bitSeq(self, preds: torch.Tensor, target: torch.Tensor):
         '''
         Parameters
         ----------
@@ -348,3 +349,18 @@ class BERMetric(Metric):
     def compute(self):
         return self.correct.float() / self.total
 
+def QFactor(BER):
+    '''
+    Function to compute Q-factor given BER estimations
+
+    Parameters
+    ----------
+    BER : TYPE: list float
+        DESCRIPTION: Contain estimated BER values
+
+    Returns
+    -------
+    Q : TYPE: float tensor of shape
+        DESCRIPTION: Estimated Q Factor
+    '''
+    return 20*torch.log10((2**0.5)*torch.from_numpy(special.erfcinv(2*BER.numpy())))
