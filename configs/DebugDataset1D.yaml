@@ -22,10 +22,7 @@ data:
     dim_t: 4096
     dispersion_compensate: False
     num_blocks: 16
-    n_train_batches: 2
-    n_val_batches: 2
-    n_test_batches: 2
     two_dim_data: false
     device: available
-    pulse_amplitudes: null
-    pulse_amplitudes_seed: 42
+    data_source_type: filesystem
+    load_dataset_root_path: None

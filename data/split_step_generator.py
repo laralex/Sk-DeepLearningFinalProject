@@ -4,6 +4,8 @@ import contextlib
 import os
 from torch import tensor
 import yaml
+from tqdm import tqdm
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -26,10 +28,11 @@ class SplitStepGenerator(pl.LightningDataModule):
                  dispersion_compensate: bool,
                  num_blocks: int,
                  two_dim_data: bool,
-                 n_train_batches: Optional[int] = 0,
-                 n_val_batches: Optional[int] = 0,
-                 n_test_batches: Optional[int] = 0,
-                 dataset_root_path: Optional[str] = None,
+                 generate_n_train_batches: Optional[int] = 0,
+                 generate_n_val_batches: Optional[int] = 0,
+                 generate_n_test_batches: Optional[int] = 0,
+                 load_dataset_root_path: Optional[str] = None,
+                 data_source_type: str = 'generate',
                  device: Union[torch.device, str] = 'available',
                  pulse_amplitudes: Optional[torch.Tensor] = None,
                  pulse_amplitudes_seed: Optional[int] = None,
@@ -47,11 +50,12 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.dim_t = dim_t
         self.dispersion_compensate = dispersion_compensate
         self.num_blocks = num_blocks
-        self.n_train_batches = n_train_batches
-        self.n_val_batches = n_val_batches
-        self.n_test_batches = n_test_batches
+        self.generate_n_train_batches = generate_n_train_batches
+        self.generate_n_val_batches = generate_n_val_batches
+        self.generate_n_test_batches = generate_n_test_batches
         self.two_dim_data = two_dim_data
-        self.dataset_root_path = dataset_root_path
+        self.data_source_type = data_source_type
+        self.load_dataset_root_path = load_dataset_root_path
 
         if isinstance(device, torch.device):
             self.device = device
@@ -163,7 +167,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         
         n = 0
         # Numerical integration (split-step)
-        for i in range(1, int(L / self.dz) + 1):
+        for i in tqdm(range(1, int(L / self.dz) + 1)):
             buf = ifft(LP * fft(buf))
             buf = buf*torch.exp(1j*c*self.dz*buf.abs()**2)
             buf = ifft(LP*fft(buf))
@@ -180,12 +184,15 @@ class SplitStepGenerator(pl.LightningDataModule):
         return t, z, u
 
     def prepare_data(self):
-        if self.dataset_root_path is None:
+        if self.data_source_type == 'generation':
             self.generate_dataset()
-        else:
-            subdir = find_dataset_subdir(self.signal_hparams, self.dataset_root_path)
-            assert subdir is not None
+        elif self.data_source_type == 'filesystem':
+            assert self.load_dataset_root_path is not None, "Path to load the dataset isn't specified through config or command line args"
+            subdir = find_dataset_subdir(self.signal_hparams, self.load_dataset_root_path)
+            assert subdir is not None, "Trying to load non already generated dataset"
             self.train, self.val, self.test = load_from_subdir(subdir)
+        else:
+            raise ValueError(self.data_source_type)
 
     def generate_dataset(self):
         '''
@@ -218,16 +225,18 @@ class SplitStepGenerator(pl.LightningDataModule):
             else:
                 context = torch.random.fork_rng()
                 torch.random.manual_seed(self.pulse_amplitudes_seed)
-            dataset_size = self.batch_size * (self.n_train_batches + self.n_val_batches + self.n_test_batches)
+            dataset_size = self.batch_size * (self.generate_n_train_batches + self.generate_n_val_batches + self.generate_n_test_batches)
             if dataset_size == 0:
                 self.t, self.z, self.E = None, None, None
                 return
             with context:
                 a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len), device=self.device) - 3
+            print(f'Generating random sequence of amplitudes, seed {self.pulse_amplitudes_seed}, {a[:2][:8]}')
         else:
             a = a.to(self.device)
             self.seq_len = a.shape[-1]
             self.t_end = ((self.seq_len - 1)//2 + 1) * self.pulse_width
+            print('Using given sequence of amplitudes')
         
         # TODO(laralex): consider dropping intermediate z (keep only z=0 and z=z_end)
         self.t, self.z, self.E = self.split_step_solver(
@@ -248,13 +257,14 @@ class SplitStepGenerator(pl.LightningDataModule):
         # transforming, splitting
         # TODO(laralex): avoid moving data back to CPU (but otherwise CUDA
         # crashes in SplitStepDataset)
-        if self.dataset_root_path is None:
+        if self.load_dataset_root_path is None:
             if self.E is not None:
-                train_end = self.batch_size*self.n_train_batches
+                train_end = self.batch_size*self.generate_n_train_batches
                 self.train = self.E[:train_end, ...].transpose(0, 1).to('cpu')
-                val_end = train_end + self.batch_size*self.n_val_batches
+                val_end = train_end + self.batch_size*self.generate_n_val_batches
                 self.val = self.E[train_end:val_end, ...].transpose(0, 1).to('cpu')
-                self.test = self.E[val_end:, ...].transpose(0, 1).to('cpu')
+                test_end = val_end + self.batch_size*self.generate_n_test_batches
+                self.test = self.E[val_end:test_end, ...].transpose(0, 1).to('cpu')
             else:
                 self.train, self.val, self.test = None, None, None
 
@@ -328,17 +338,18 @@ def find_dataset_subdir(params_dict, datasets_root):
     version_root = None
     for root, subdirs, _ in os.walk(datasets_root, topdown=False):
         for version in subdirs:
-            candidate_yaml = f'{root}/{version}/signal_hparams.yaml'
+            root = Path(root)
+            candidate_yaml = root/version/'signal_hparams.yaml'
             if os.path.exists(candidate_yaml):
                 with open(candidate_yaml, 'r') as stream:
                     candidate_hparams = yaml.safe_load(stream)
                     if candidate_hparams == params_dict:
-                        return f'{root}/{version}'
+                        return root/version
     return None
 
 def load_from_subdir(path):
-    assert os.path.exists(f'{path}/signal_hparams.yaml')
-    return concat_files(f'{path}/train'), concat_files(f'{path}/val'), concat_files(f'{path}/test')
+    assert os.path.exists(path/'signal_hparams.yaml')
+    return concat_files(path/'train'), concat_files(path/'val'), concat_files(path/'test')
 
 def concat_files(root_path):
     assert os.path.exists(root_path)
