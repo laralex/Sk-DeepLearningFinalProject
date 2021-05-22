@@ -176,7 +176,7 @@ class SplitStepGenerator(pl.LightningDataModule):
         
         n = 0
         # Numerical integration (split-step)
-        for i in tqdm(range(1, int(L / self.dz) + 1)):
+        for i in range(1, int(L / self.dz) + 1):
             buf = ifft(LP * fft(buf))
             buf = buf*torch.exp(1j*c*self.dz*buf.abs()**2)
             buf = ifft(LP*fft(buf))
@@ -222,8 +222,8 @@ class SplitStepGenerator(pl.LightningDataModule):
             Shape in case of 2d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
             DESCRIPTION: Output transmission line data.
         '''
-        print('Generating the dataset using Split-Step')
-        start_time = time.time()
+        # print('Generating the dataset using Split-Step')
+        # start_time = time.time()
 
         a = self.pulse_amplitudes
 
@@ -240,12 +240,12 @@ class SplitStepGenerator(pl.LightningDataModule):
                 return
             with context:
                 a = 2*torch.randint(1,3, size=(dataset_size, self.seq_len), device=self.device) - 3
-            print(f'Generating random sequence of amplitudes, seed {self.pulse_amplitudes_seed}, {a[0][:8]}')
+            # print(f'Generating random sequence of amplitudes, seed {self.pulse_amplitudes_seed}, {a[0][:8]}')
         else:
             a = a.to(self.device)
             self.seq_len = a.shape[-1]
             self.t_end = ((self.seq_len - 1)//2 + 1) * self.pulse_width
-            print('Using given sequence of amplitudes')
+            # print('Using given sequence of amplitudes')
         
         # TODO(laralex): consider dropping intermediate z (keep only z=0 and z=z_end)
         self.t, self.z, self.E = self.split_step_solver(
@@ -259,8 +259,8 @@ class SplitStepGenerator(pl.LightningDataModule):
         
         if self.two_dim_data:
             self.E = transform_to_2d(self.E, self.num_blocks)
-        end_time = time.time()
-        print(f'Dataset was generated in {int(end_time - start_time)} sec')
+        # end_time = time.time()
+        # print(f'Dataset was generated in {int(end_time - start_time)} sec')
 
     def setup(self, stage: Optional[str] = None):
         # transforming, splitting
