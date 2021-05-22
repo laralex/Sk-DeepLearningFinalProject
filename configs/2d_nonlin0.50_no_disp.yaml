@@ -1,0 +1,29 @@
+experiment_name: 'DatasetDebugger'
+
+trainer:
+  max_epochs: 3
+
+model:
+  class_path: models.dataset_debugging_model.DatasetDebuggingModel
+  init_args:
+    is_two_dim: True
+
+data:
+  class_path: data.split_step_generator.SplitStepGenerator
+  init_args:
+    batch_size: 50
+    seq_len: 2049
+    dispersion: 0.5
+    nonlinearity: 0.5
+    pulse_width: 10
+    z_end: 100
+    dz: 0.1
+    z_stride: 1000
+    dim_t: 65536
+    dispersion_compensate: True
+    num_blocks: 32
+    two_dim_data: True
+    device: available
+    data_source_type: filesystem
+    load_dataset_root_path: None
+    complex_type_size: 64
