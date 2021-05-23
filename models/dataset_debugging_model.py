@@ -1,19 +1,28 @@
 import pytorch_lightning as pl
-
+from typing import Optional
 class DatasetDebuggingModel(pl.LightningModule):
-    def __init__(self, is_two_dim: bool):
+    def __init__(self,
+        is_two_dim: bool,
+        expected_signal_size: int,
+        num_blocks: Optional[int],
+        batch_size: int):
+
         super().__init__()
         self.is_two_dim = is_two_dim
+        self.expected_signal_size = expected_signal_size
+        self.num_blocks = num_blocks
+        self.batch_size = batch_size
 
     def forward(self, x):
+        x = x.squeeze()
         if self.is_two_dim:
-            assert len(x.shape) == 4, "Expecting [bs, ch, h, w] size"
+            assert x.shape == (self.batch_size, self.expected_signal_size, self.num_blocks), "Expecting [bs, h, w] size"
         else:
-            assert len(x.shape) == 3, "Expecting [bs, ch, seq] size"
-        assert x.shape[1] == 1, "Number of channels should be 1"
+            assert x.shape == (self.batch_size, self.expected_signal_size), "Expecting [bs, seq] size"
         return x
 
     def training_step(self, batch, batch_idx):
+        print('training batch' + batch_idx)
         distorted, target = batch
         assert distorted.shape == target.shape
         self.forward(distorted)
@@ -21,10 +30,20 @@ class DatasetDebuggingModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        self.training_step(batch, batch_idx)
+        print('val batch' + batch_idx)
+        distorted, target = batch
+        assert distorted.shape == target.shape
+        self.forward(distorted)
+        loss = 0.0
+        return loss
 
     def test_step(self, batch, batch_idx):
-        self.training_step(batch, batch_idx)
+        print('test batch' + batch_idx)
+        distorted, target = batch
+        assert distorted.shape == target.shape
+        self.forward(distorted)
+        loss = 0.0
+        return loss
 
     def configure_optimizers(self):
         return [], []
