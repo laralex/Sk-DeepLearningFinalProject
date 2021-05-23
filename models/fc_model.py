@@ -8,6 +8,7 @@ import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
 import models
 from models.loss_functions import EVM
+from data.transform_1d_2d import *
 
 
 class FC_regressor(pl.LightningModule):
@@ -58,23 +59,27 @@ class FC_regressor(pl.LightningModule):
 
 
     def forward(self, x):
-        return self.net(x)
+        real = x.real.squeeze().permute(1,0)
+        imag = x.imag.squeeze().permute(1,0)
+        real, imag = self.net(real, imag)
+        return (real + 1j*imag).permute(1,0).unsqueeze(0).unsqueeze(0)
 
 
     def training_step(self, batch, batch_idx):
         data, target = batch
         preds = self.forward(data)
-
-        loss = self.criterion(preds, target)
+        
+        loss = self.criterion(transform_to_1d(preds), transform_to_1d(target))
         self.log("loss_train", loss, prog_bar = False, logger = True)
-        return {"loss":loss, "preds": preds, "target": target}
+        return loss
 
 
     def validation_step(self, batch, batch_idx):
         data, target = batch
         preds = self.forward(data)
 
-        return {'preds':preds , 'target': target}
+        loss = self.criterion(transform_to_1d(preds), transform_to_1d(target))
+        self.log("loss_val", loss, prog_bar = False, logger = True)
 
 
     def configure_optimizers(self):
@@ -86,19 +91,19 @@ class FC_regressor(pl.LightningModule):
         return [opt], [sch]
 
 
-    def training_epoch_end(self, outputs):
-        preds = torch.cat([r['preds'] for r in outputs], dim=0)
-        targets = torch.cat([r['target'] for r in outputs], dim=0)
-        self.train_accuracy(preds, targets)
-        self.log('accuracy_train', self.train_accuracy, prog_bar = True, logger = True)
+    # def training_epoch_end(self, outputs):
+    #     preds = torch.cat([r['preds'] for r in outputs], dim=0)
+    #     targets = torch.cat([r['target'] for r in outputs], dim=0)
+    #     self.train_accuracy(preds, targets)
+    #     self.log('accuracy_train', self.train_accuracy, prog_bar = True, logger = True)
     
 
-    def validation_epoch_end(self, outputs):
-        preds = torch.cat([r['preds'] for r in outputs], dim=0)
-        targets = torch.cat([r['target'] for r in outputs], dim=0)
+    # def validation_epoch_end(self, outputs):
+    #     preds = torch.cat([r['preds'] for r in outputs], dim=0)
+    #     targets = torch.cat([r['target'] for r in outputs], dim=0)
 
-        self.val_accuracy(preds, targets)
-        self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
+    #     self.val_accuracy(preds, targets)
+    #     self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
 
     def get_configuration(self):
         '''
@@ -148,7 +153,8 @@ class FC_model(torch.nn.Module):
 
         # Number of layers and list of layers
         self.n_layers = layers
-        self.layers = nn.ModuleList([])
+        self.real_layers = nn.ModuleList([])
+        self.imag_layers = nn.ModuleList([])
 
         # Activation function
         ActivationClass = getattr(torch.nn, activation)
@@ -159,16 +165,20 @@ class FC_model(torch.nn.Module):
 
         # Adding linear layers and activations to list
         for idx in range(layers):
-            self.layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
-            self.layers.append(ActivationClass())
-        
+            self.real_layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+            self.real_layers.append(ActivationClass())    
+            self.imag_layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+            self.imag_layers.append(ActivationClass())
 
-    def forward(self,x):
+    def forward(self,real,imag):
         # forward prop for all layers 
-        for layer in self.layers:
-            x = layer(x)
+        for layer in self.real_layers:
+            real = layer(real)
         
-        return x 
+        for layer in self.real_layers:
+            imag = layer(imag)
+        
+        return real, imag
 
 
 
