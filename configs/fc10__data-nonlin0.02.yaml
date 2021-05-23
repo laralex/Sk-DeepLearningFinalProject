@@ -24,7 +24,7 @@ model:
 data:
   class_path: data.split_step_generator.SplitStepGenerator
   init_args:
-    batch_size: 50
+    batch_size: 1
     seq_len: 2049
     dispersion: 0.5
     nonlinearity: 0.02
