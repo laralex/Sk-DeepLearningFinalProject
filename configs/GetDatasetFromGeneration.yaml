@@ -20,7 +20,7 @@ data:
     nonlinearity: 0.5
     pulse_width: 10
     z_end: 100
-    dz: 0.1
+    dz: 1
     z_stride: 1000
     dim_t: 65536
     dispersion_compensate: True
@@ -32,7 +32,7 @@ data:
     generation_nonlinearity_limits:
       - 0.02
       - 0.5
-    generate_n_train_batches: 1
-    generate_n_val_batches: 1
-    generate_n_test_batches:  1
+    generate_n_train_batches: 3
+    generate_n_val_batches: 4
+    generate_n_test_batches:  0
     complex_type_size: 64

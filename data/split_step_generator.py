@@ -78,9 +78,12 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.generate_n_val_batches = generate_n_val_batches
         self.generate_n_test_batches = generate_n_test_batches
         self.generation_seed = generation_seed
+        self.rng = None
         if self.generation_seed is not None:
-            torch.random.manual_seed(self.generation_seed)
-        self.train_seed, self.val_seed, self.test_seed = torch.randint(2**31, size=(3,))
+            self.rng = torch.Generator()
+            self.rng.manual_seed(self.generation_seed)
+        seeds = torch.randint(2**31, size=(3,), dtype=torch.long, generator=self.rng)
+        self.train_seed, self.val_seed, self.test_seed = seeds[0].item(), seeds[1].item(), seeds[2].item()
         self.generation_nonlinearity_limits = generation_nonlinearity_limits
         self.load_dataset_root_path = load_dataset_root_path
 
@@ -104,23 +107,11 @@ class SplitStepGenerator(pl.LightningDataModule):
         }
 
     def prepare_data(self):
-        if self.data_source_type == 'filesystem':
-            assert self.load_dataset_root_path is not None, "Path to load the dataset isn't specified through config or command line args"
-            subdir = auxiliary.files.find_dataset_subdir(self.signal_hparams, self.load_dataset_root_path)
-            assert subdir is not None, "Can't find a dataset with signal_hparams.yaml matching parameters"
-            self.train, self.val, self.test = auxiliary.files.load_from_subdir(subdir, self.complex_type)
-            self.train = SplitStepDataset(data=self.train)
-            self.val = SplitStepDataset(data=self.val)
-            self.test = SplitStepDataset(data=self.test)
-        elif self.data_source_type == 'generation':
-            if self.generation_nonlinearity_limits is None:
-                nonlinearity_limits = (self.nonlinearity, self.nonlinearity)
-            else:
-                nonlinearity_limits = self.generation_nonlinearity_limits
-            make_dataset = lambda n_batches, seed, pregenerate=False: SplitStepDataset(
+        make_dataset = lambda n_batches=1, seed=None, pregenerate=False, data=None: SplitStepDataset(
                 n_batches=n_batches,
                 seed=seed,
                 pregenerate=pregenerate,
+                data=data,
                 batch_size=self.batch_size,
                 seq_len=self.seq_len,
                 dispersion=self.dispersion,
@@ -137,6 +128,20 @@ class SplitStepGenerator(pl.LightningDataModule):
                 complex_type=self.complex_type,
                 device=self.device,
                 nonlinearity_limits=nonlinearity_limits,)
+        if self.data_source_type == 'filesystem':
+            assert self.load_dataset_root_path is not None, "Path to load the dataset isn't specified through config or command line args"
+            subdir = auxiliary.files.find_dataset_subdir(self.signal_hparams, self.load_dataset_root_path)
+            assert subdir is not None, "Can't find a dataset with signal_hparams.yaml matching parameters"
+            self.train, self.val, self.test = auxiliary.files.load_from_subdir(subdir, self.complex_type)
+            self.train = make_dataset(data=self.train)
+            self.val = make_dataset(data=self.val)
+            self.test = make_dataset(data=self.test)
+        elif self.data_source_type == 'generation':
+            if self.generation_nonlinearity_limits is None:
+                nonlinearity_limits = (self.nonlinearity, self.nonlinearity)
+            else:
+                nonlinearity_limits = self.generation_nonlinearity_limits
+
             self.train = make_dataset(self.generate_n_train_batches, self.train_seed)
             self.val = make_dataset(self.generate_n_val_batches, self.val_seed, pregenerate=True)
             self.test = make_dataset(self.generate_n_test_batches, self.test_seed, pregenerate=True)
@@ -144,15 +149,15 @@ class SplitStepGenerator(pl.LightningDataModule):
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster
         return DataLoader(self.train,
-            batch_size=self.loader_batch_size, pin_memory=False, shuffle=True, num_workers=3)
+            batch_size=self.loader_batch_size, pin_memory=False, shuffle=True, num_workers=4)
 
     def val_dataloader(self):
         return DataLoader(self.val,
-            batch_size=self.loader_batch_size, pin_memory=False, num_workers=3)
+            batch_size=self.loader_batch_size, pin_memory=False, num_workers=4)
 
     def test_dataloader(self):
         return DataLoader(self.test,
-            batch_size=self.loader_batch_size, pin_memory=False, num_workers=3)
+            batch_size=self.loader_batch_size, pin_memory=False, num_workers=4)
 
 # TODO(laralex): consider IterableDataset
 class SplitStepDataset(Dataset):
@@ -200,33 +205,36 @@ class SplitStepDataset(Dataset):
         self.data = data
         self.n_batches = n_batches
         self.seed = seed
-        if self.seed is not None:
-            torch.random.manual_seed(self.seed)
-            self.rng_state = torch.random.get_rng_state()
+        self.rng = None
+
         if nonlinearity_limits is not None:
             self.nonlin_min, self.nonlin_max = nonlinearity_limits
         else:
             self.nonlin_min, self.nonlin_max = self.nonlinearity, self.nonlinearity
         self.batches_list = None
         if pregenerate:
+            if self.seed is not None:
+                self.rng = torch.Generator()
+                self.rng.manual_seed(self.seed)
+            print(f'Pregenerating {self.n_batches} batches')
             self.batches_list = []
             for idx in range(self.n_batches):
-                _, _, batch = self.generate_batch(self.get_nonlinearity_coef(idx))
+                nonlinearity = self.get_nonlinearity_coef(idx)
+                _, _, batch = self.generate_batch()
                 self.batches_list.append(batch.to('cpu'))
+            self.rng = None
 
     # get sample
     def __getitem__(self, idx):
+        # print(self.data is None, self.batches_list is None)
         if self.data is not None:
             dataset_part = self.data[:, idx, ...]
         elif self.batches_list is not None:
             dataset_part = self.batches_list[idx]
         else:
-            if self.seed is not None:
-                torch.random.set_rng_state(self.rng_state)
-            _, _, dataset_part = self.generate_batch(self.get_nonlinearity_coef(idx))
+            nonlinearity = self.get_nonlinearity_coef(idx)
+            _, _, dataset_part = self.generate_batch(nonlinearity)
             dataset_part = dataset_part.to('cpu')
-            if self.seed is not None:
-                self.rng_state = torch.random.get_rng_state()
         input_ = dataset_part[0, ...].squeeze()
         target_ = dataset_part[-1, ...].squeeze()
         return input_, target_
@@ -237,8 +245,21 @@ class SplitStepDataset(Dataset):
         else:
             return self.n_batches
 
+    # def __getstate__(self):
+    #     state = self.__dict__.copy()
+    #     state['rng_state'] = state['rng'].get_state()
+    #     del state['rng']
+    #     return state
+
+    # def __setstate__(self, state):
+    #     rng = torch.Generator()
+    #     rng.set_state(state['rng_state'])
+    #     state['rng'] = rng
+    #     del state['rng_state']
+    #     self.__dict__.update(state)
+
     def get_nonlinearity_coef(self, batch_idx):
-        return self.nonlin_min + (batch_idx / self.n_batches)*(self.nonlin_max-self.nonlin_min)
+        return self.nonlin_min + (batch_idx / (self.n_batches-1 if self.n_batches>1 else 1.0))*(self.nonlin_max-self.nonlin_min)
 
     def Etanal(self, t, z, a, T):
         '''
@@ -260,13 +281,18 @@ class SplitStepDataset(Dataset):
             DESCRIPTION: Initial data at transmitting point (target).
         '''
         E0 = torch.zeros(a.shape[0], self.dim_t, dtype=self.complex_type, device=self.device)
-        complex_z = torch.as_tensor(1 + 1j*z, dtype=self.complex_type, device=self.device)
-        half_seq_len = (self.seq_len - 1)//2
-        sequence_indices = torch.arange(-half_seq_len, half_seq_len + 1, device=self.device).view(-1, 1)
-        # [1, dim_t] minus [seq_len, 1] makes them broadcasted to [seq_len, dim_t]
-        y_whole = torch.exp(-(t.view(1, -1) - T * sequence_indices)**2 / (2*complex_z)) # [seq_len, dim_t]
-        x_whole = a/(pi**(1/4)*torch.sqrt(complex_z)) # [bs, seq_len]
-        torch.matmul(x_whole, y_whole, out=E0) # [bs, dim_t]
+        x_coef = 1/(pi**(1/4)*torch.sqrt(1 + 1j*z).to(self.device))
+        for k in range(1, self.seq_len + 1):
+            x = (a[:,k-1]*x_coef).view(a.shape[0], 1)
+            y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
+            torch.add(E0, x.multiply(y), out=E0)
+        # complex_z = torch.as_tensor(1 + 1j*z, dtype=self.complex_type, device=self.device)
+        # half_seq_len = (self.seq_len - 1)//2
+        # sequence_indices = torch.arange(-half_seq_len, half_seq_len + 1, device=self.device).view(-1, 1)
+        # # [1, dim_t] minus [seq_len, 1] makes them broadcasted to [seq_len, dim_t]
+        # y_whole = torch.exp(-(t.view(1, -1) - T * sequence_indices)**2 / (2*complex_z)) # [seq_len, dim_t]
+        # x_whole = a/(pi**(1/4)*torch.sqrt(complex_z)) # [bs, seq_len]
+        # torch.matmul(x_whole, y_whole, out=E0) # [bs, dim_t]
         return E0
 
     def split_step_solver(self, a, T, d, c, L):
@@ -352,7 +378,7 @@ class SplitStepDataset(Dataset):
             Shape in case of 2d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
             DESCRIPTION: Output transmission line data.
         '''
-        a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len), device=self.device) - 3
+        a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len), device=self.device, generator=self.rng) - 3
         if nonlinearity is None:
             nonlinearity = self.nonlinearity
         # TODO(laralex): consider dropping intermediate z (keep only z=0 and z=z_end)

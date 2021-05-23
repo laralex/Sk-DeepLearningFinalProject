@@ -1,3 +1,4 @@
+import gc
 import torch
 import os
 import pytorch_lightning as pl
@@ -89,6 +90,7 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, 
             subclass_mode_data=True)
     finally:
         os.chdir(old_cwd)
+        gc.collect()
 
     return cli.model
 
