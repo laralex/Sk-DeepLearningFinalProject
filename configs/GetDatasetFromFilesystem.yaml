@@ -20,7 +20,7 @@ data:
     nonlinearity: 0.5
     pulse_width: 10
     z_end: 100
-    dz: 1
+    dz: 0.1
     z_stride: 1000
     dim_t: 65536
     dispersion_compensate: True

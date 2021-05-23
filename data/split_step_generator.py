@@ -107,6 +107,10 @@ class SplitStepGenerator(pl.LightningDataModule):
         }
 
     def prepare_data(self):
+        if self.generation_nonlinearity_limits is None:
+            nonlinearity_limits = (self.nonlinearity, self.nonlinearity)
+        else:
+            nonlinearity_limits = self.generation_nonlinearity_limits
         make_dataset = lambda n_batches=1, seed=None, pregenerate=False, data=None: SplitStepDataset(
                 n_batches=n_batches,
                 seed=seed,
@@ -137,11 +141,6 @@ class SplitStepGenerator(pl.LightningDataModule):
             self.val = make_dataset(data=self.val)
             self.test = make_dataset(data=self.test)
         elif self.data_source_type == 'generation':
-            if self.generation_nonlinearity_limits is None:
-                nonlinearity_limits = (self.nonlinearity, self.nonlinearity)
-            else:
-                nonlinearity_limits = self.generation_nonlinearity_limits
-
             self.train = make_dataset(self.generate_n_train_batches, self.train_seed)
             self.val = make_dataset(self.generate_n_val_batches, self.val_seed, pregenerate=True)
             self.test = make_dataset(self.generate_n_test_batches, self.test_seed, pregenerate=True)
