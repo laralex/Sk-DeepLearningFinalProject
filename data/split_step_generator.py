@@ -1,4 +1,4 @@
-import auxiliary
+import auxiliary.files
 from data.transform_1d_2d import *
 
 from typing import Any, Dict, Optional, Type, Union, Tuple
@@ -149,15 +149,15 @@ class SplitStepGenerator(pl.LightningDataModule):
     def train_dataloader(self):
         # TODO: pin_memory=True might be faster
         return DataLoader(self.train,
-            batch_size=self.loader_batch_size, pin_memory=False, shuffle=True, num_workers=4)
+            batch_size=self.loader_batch_size, pin_memory=False, shuffle=True, num_workers=2)
 
     def val_dataloader(self):
         return DataLoader(self.val,
-            batch_size=self.loader_batch_size, pin_memory=False, num_workers=4)
+            batch_size=self.loader_batch_size, pin_memory=False, num_workers=2)
 
     def test_dataloader(self):
         return DataLoader(self.test,
-            batch_size=self.loader_batch_size, pin_memory=False, num_workers=4)
+            batch_size=self.loader_batch_size, pin_memory=False, num_workers=2)
 
 # TODO(laralex): consider IterableDataset
 class SplitStepDataset(Dataset):
@@ -214,7 +214,7 @@ class SplitStepDataset(Dataset):
         self.batches_list = None
         if pregenerate:
             if self.seed is not None:
-                self.rng = torch.Generator()
+                self.rng = torch.Generator(self.device)
                 self.rng.manual_seed(self.seed)
             print(f'Pregenerating {self.n_batches} batches')
             self.batches_list = []
@@ -228,15 +228,15 @@ class SplitStepDataset(Dataset):
     def __getitem__(self, idx):
         # print(self.data is None, self.batches_list is None)
         if self.data is not None:
-            dataset_part = self.data[:, idx, ...]
+            dataset_part = self.data[:, idx, ...].squeeze()
         elif self.batches_list is not None:
             dataset_part = self.batches_list[idx]
         else:
             nonlinearity = self.get_nonlinearity_coef(idx)
             _, _, dataset_part = self.generate_batch(nonlinearity)
             dataset_part = dataset_part.to('cpu')
-        input_ = dataset_part[0, ...].squeeze()
-        target_ = dataset_part[-1, ...].squeeze()
+        input_ = dataset_part[0, ...]
+        target_ = dataset_part[-1, ...]
         return input_, target_
 
     def __len__(self):
