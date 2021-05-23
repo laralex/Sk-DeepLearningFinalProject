@@ -78,7 +78,8 @@ class SplitStepGenerator(pl.LightningDataModule):
         self.generate_n_val_batches = generate_n_val_batches
         self.generate_n_test_batches = generate_n_test_batches
         self.generation_seed = generation_seed
-        torch.random.manual_seed(self.generation_seed)
+        if self.generation_seed is not None:
+            torch.random.manual_seed(self.generation_seed)
         self.train_seed, self.val_seed, self.test_seed = torch.randint(2**31, size=(3,))
         self.generation_nonlinearity_limits = generation_nonlinearity_limits
         self.load_dataset_root_path = load_dataset_root_path
@@ -211,7 +212,7 @@ class SplitStepDataset(Dataset):
             self.batches_list = []
             for idx in range(self.n_batches):
                 _, _, batch = self.generate_batch(self.get_nonlinearity_coef(idx))
-                self.batches_list.append(batch)
+                self.batches_list.append(batch.to('cpu'))
 
     # get sample
     def __getitem__(self, idx):
@@ -223,6 +224,7 @@ class SplitStepDataset(Dataset):
             if self.seed is not None:
                 torch.random.set_rng_state(self.rng_state)
             _, _, dataset_part = self.generate_batch(self.get_nonlinearity_coef(idx))
+            dataset_part = dataset_part.to('cpu')
             if self.seed is not None:
                 self.rng_state = torch.random.get_rng_state()
         input_ = dataset_part[0, ...].squeeze()

@@ -22,7 +22,7 @@ class DatasetDebuggingModel(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_idx):
-        print('training batch' + batch_idx)
+        print(f'training batch {batch.sum():.3f}')
         distorted, target = batch
         assert distorted.shape == target.shape
         self.forward(distorted)
@@ -30,7 +30,7 @@ class DatasetDebuggingModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        print('val batch' + batch_idx)
+        print(f'val batch {batch.sum():.3f}')
         distorted, target = batch
         assert distorted.shape == target.shape
         self.forward(distorted)
@@ -38,7 +38,7 @@ class DatasetDebuggingModel(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        print('test batch' + batch_idx)
+        print(f'test batch {batch_idx}')
         distorted, target = batch
         assert distorted.shape == target.shape
         self.forward(distorted)

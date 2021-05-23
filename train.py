@@ -68,7 +68,9 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, 
         if checkpoint_kwargs.get('action', 'load_model') == 'load_model':
             do_fit = False
         version = checkpoint_kwargs.get('version', 'from_checkpoint')
-
+    try:
+        torch.multiprocessing.set_start_method('spawn')
+    except: pass
     old_cwd = os.getcwd()
     os.chdir(root_dir)
     try:
