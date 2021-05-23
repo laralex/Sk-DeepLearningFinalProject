@@ -5,12 +5,14 @@ import pytorch_lightning as pl
 from pytorch_lightning.utilities.cli import LightningCLI, SaveConfigCallback
 
 class CustomLightningCLI(LightningCLI):
-    def __init__(self, root_dir, config_path, *args, do_fit=True, version=None, dataset_root_path=None, **kwargs):
+    def __init__(self, root_dir, config_path, *args, do_fit=True, version=None, dataset_root_path=None, model_override=None, data_override=None, **kwargs):
         self.root_dir = root_dir
         self.config_path = config_path
         self.do_fit = do_fit
         self.version = version
         self.dataset_root_path = dataset_root_path
+        self.model_override = model_override
+        self.data_override = data_override
         super().__init__(*args, **kwargs)
 
     def parse_arguments(self):
@@ -49,7 +51,19 @@ class CustomLightningCLI(LightningCLI):
         if self.do_fit:
             super().fit()
 
-def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, dataset_root_path=None):
+    def instantiate_datamodule(self) -> None:
+        if self.data_override is None:
+            super().instantiate_datamodule()
+        else:
+            self.datamodule = self.data_override
+
+    def instantiate_model(self) -> None:
+        if self.model_override is None:
+            super().instantiate_model()
+        else:
+            self.model = self.model_override
+
+def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, dataset_root_path=None, model_override=None, data_override=None):
     """
     root_dir: absolute path to where to put logs/ directory
     config_path: absolute path to a file with configuration in YAML format
@@ -81,6 +95,8 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, 
             pl.LightningModule,
             pl.LightningDataModule,
             dataset_root_path=dataset_root_path,
+            model_override=model_override,
+            data_override=data_override,
             do_fit=do_fit,
             version=version,
             trainer_defaults=trainer_defaults,
@@ -92,7 +108,7 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, 
         os.chdir(old_cwd)
         gc.collect()
 
-    return cli.model
+    return cli.model, cli.datamodule
 
 if __name__ == '__main__':
     main(gpu_indices=1 if torch.cuda.is_available() else None)
