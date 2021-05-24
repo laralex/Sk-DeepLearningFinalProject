@@ -233,8 +233,8 @@ class SplitStepDataset(Dataset):
             nonlinearity = self.get_nonlinearity_coef(idx)
             _, _, dataset_part = self.generate_batch(nonlinearity)
             dataset_part = dataset_part.to('cpu')
-        input_ = dataset_part[0, ...]
-        target_ = dataset_part[-1, ...]
+        input_ = dataset_part[-1, ...]
+        target_ = dataset_part[0, ...]
         return input_, target_
 
     def __len__(self):
