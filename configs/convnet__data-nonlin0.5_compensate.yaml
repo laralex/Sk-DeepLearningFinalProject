@@ -1,5 +1,5 @@
 experiment_name: 'ConvNet_nonlinearity0.5_compensate'
-checkpoint_monitor: 'loss'
+checkpoint_monitor: 'loss_val'
 checkpoint_monitor_mode: 'min'
 
 model:
