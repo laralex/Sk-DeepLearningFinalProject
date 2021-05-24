@@ -22,12 +22,13 @@ data_gen = SplitStepDataset(batch_size=2,
                           num_blocks = 32,
                           n_batches = 1,
                           two_dim_data=True,
-                          seed=42,
                           device=torch.device('cpu'),
                           complex_type=torch.complex64,
                           )
 
-t, z, u2d = data_gen.generate_batch()
+generator = torch.Generator()
+generator.manual_seed(42)
+t, z, u2d = data_gen.generate_batch(generator=generator)
 
 t_start, t_end = data_gen.t_window
 
