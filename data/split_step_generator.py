@@ -213,15 +213,14 @@ class SplitStepDataset(Dataset):
         self.batches_list = None
         if pregenerate:
             if self.seed is not None:
-                self.rng = torch.Generator(self.device)
-                self.rng.manual_seed(self.seed)
+                generator = torch.Generator(self.device)
+                generator.manual_seed(self.seed)
             print(f'Pregenerating {self.n_batches} batches')
             self.batches_list = []
             for idx in range(self.n_batches):
                 nonlinearity = self.get_nonlinearity_coef(idx)
-                _, _, batch = self.generate_batch()
+                _, _, batch = self.generate_batch(nonlinearity=nonlinearity, generator=generator)
                 self.batches_list.append(batch.to('cpu'))
-            self.rng = None
 
     # get sample
     def __getitem__(self, idx):
@@ -281,9 +280,10 @@ class SplitStepDataset(Dataset):
         '''
         E0 = torch.zeros(a.shape[0], self.dim_t, dtype=self.complex_type, device=self.device)
         x_coef = 1/(pi**(1/4)*torch.sqrt(1 + 1j*z).to(self.device))
+        half_seq_len = (self.seq_len - 1)//2
         for k in range(1, self.seq_len + 1):
             x = (a[:,k-1]*x_coef).view(a.shape[0], 1)
-            y = torch.exp(-(t-k*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
+            y = torch.exp(-(t-(k-half_seq_len-1)*T)**2/(2*(1 + 1j*z))).view(1, self.dim_t)
             torch.add(E0, x.multiply(y), out=E0)
         # complex_z = torch.as_tensor(1 + 1j*z, dtype=self.complex_type, device=self.device)
         # half_seq_len = (self.seq_len - 1)//2
@@ -358,7 +358,7 @@ class SplitStepDataset(Dataset):
 
         return t, z, u
 
-    def generate_batch(self, nonlinearity=None):
+    def generate_batch(self, nonlinearity=None, generator=None):
         '''
         Direct signal propagation is performed through the split-step method.
         Optional: dispersion compensation and data transformation in 2d.
@@ -377,7 +377,7 @@ class SplitStepDataset(Dataset):
             Shape in case of 2d-time: [batch_size, dim_z, 2*dim_t_per_blok, num_bloks].
             DESCRIPTION: Output transmission line data.
         '''
-        a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len), device=self.device, generator=self.rng) - 3
+        a = 2*torch.randint(1,3, size=(self.batch_size, self.seq_len), device=self.device, generator=generator) - 3
         if nonlinearity is None:
             nonlinearity = self.nonlinearity
         # TODO(laralex): consider dropping intermediate z (keep only z=0 and z=z_end)
