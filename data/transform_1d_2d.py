@@ -47,6 +47,7 @@ def transform_to_1d(data):
     data : TYPE: torch.complex128 tensor of shape [batch_size, dim_z, dim_t]
         DESCRIPTION: Data with 1d-time.
     '''
+    if len(data.shape) < 4: data = data.unsqueeze(1)
     dim_padded_t = data.shape[-2]
     data = data[:, :, dim_padded_t//4:dim_padded_t*3//4, :]
     data = data.transpose(-2, -1).flatten(-2, -1)
