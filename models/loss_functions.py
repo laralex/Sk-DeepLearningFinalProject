@@ -14,5 +14,5 @@ class EVM(nn.Module):
         Error vector magnetude loss
         Mean value of |input - target|^2 / |target|^2
         '''
-        return torch.mean((torch.abs(input - target))**2/(torch.abs(target))**2)
+        return torch.mean((torch.abs(input - target))**2/(torch.abs(target)+1e-8)**2)
         
