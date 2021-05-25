@@ -5,13 +5,18 @@ checkpoint_monitor_mode: 'min'
 model:
   class_path: models.convnet.ConvNet_regressor
   init_args:
+    seq_len: 2049
+    pulse_width: 10
+    z_end: 100
+    dim_t: 65536
+    decision_level: 2
     in_features: 4096
     bias: True
     criterion: EVM
     optimizer: Adam
     optimizer_kwargs:
       lr: 0.001
-      betas: 
+      betas:
         - 0.9
         - 0.999
     scheduler: StepLR

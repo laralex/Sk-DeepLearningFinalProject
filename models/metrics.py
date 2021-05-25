@@ -54,7 +54,7 @@ class BEREstimater(torch.nn.Module):
 
 
   ### Component  funtions   
-  def decod_signal(self, signal, pulse_width, t, t_window):
+    def decod_signal(self, signal, pulse_width, t, t_window):
         '''
         Takes as input symmetric pulses (negative and positive time),
         but work only with pulses in POSITIVE time (without symmetric at zero pulse )
@@ -85,6 +85,7 @@ class BEREstimater(torch.nn.Module):
 
         #cutting the time (we work only with positive time,
         # without symmetric pulse at zero)
+        t = t.to(signal.device)
         T = pulse_width
         t_start, t_end = t_window
         t_start = torch.argmin(torch.abs(t - 0))
@@ -218,7 +219,7 @@ class BEREstimater(torch.nn.Module):
 
 
   ### Assembled  functions
-  def forward_signal(self, signal, t=None, decision_level=None, pulse_number=None,
+    def forward_signal(self, signal, t=None, decision_level=None, pulse_number=None,
               pulse_width=None, t_window=None):
         '''
         Parameters
@@ -363,4 +364,5 @@ def QFactor(BER):
     Q : TYPE: float tensor of shape
         DESCRIPTION: Estimated Q Factor
     '''
-    return 20*torch.log10((2**0.5)*torch.from_numpy(special.erfcinv(2*BER.numpy())))
+    # 20*torch.log10((2**0.5)*torch.from_numpy(special.erfcinv(2*BER.numpy())))
+    return 20*torch.log10((2**0.5)*torch.tensor(special.erfcinv(2*BER.numpy())))

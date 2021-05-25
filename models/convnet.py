@@ -1,3 +1,4 @@
+import torch
 import pytorch_lightning as pl
 from torch import nn, mean, optim
 from copy import deepcopy
@@ -7,19 +8,31 @@ from torch.optim.optimizer import Optimizer
 import torchmetrics
 import models
 from models.loss_functions import EVM
-from data.transform_1d_2d import *
+from models.metrics import BERMetric, QFactor
+from data.transform_1d_2d import transform_to_1d
+from math import sqrt
+
+# import plotly.express as px
+# from plotly.offline import plot
+import matplotlib.pyplot as plt
 
 class ConvNet_regressor(pl.LightningModule):
     def __init__(
         self, 
+        seq_len: int,
+        pulse_width: float,
+        z_end: float,
+        dim_t: int,
+        decision_level: float,
+        
         in_features: int,
-        bias = False, 
+        bias = False,
 
         optimizer:str = 'Adam',
         optimizer_kwargs: Dict[str, Any] = {'lr':1e-4},
         scheduler: str = 'StepLR',
         scheduler_kwargs: Dict[str, Any] = {'step_size':10},
-        criterion: str = 'EVM'
+        criterion: str = 'EVM',
         ):
         '''
         in_features (int) - number of input features in model
@@ -46,12 +59,30 @@ class ConvNet_regressor(pl.LightningModule):
             self.criterion = nn.MSELoss()
         elif criterion == 'EVM':
             self.criterion = EVM()
-
-        self.train_accuracy = torchmetrics.Accuracy()
-        self.val_accuracy = torchmetrics.Accuracy()
+        
+        self.seq_len = seq_len
+        self.pulse_width = pulse_width
+        self.z_end = z_end
+        self.dim_t = dim_t
+        
+        self.t_end = ((seq_len - 1)//2 + 1) * pulse_width      
+        tMax = self.t_end + 4*sqrt(2*(1 + z_end**2))
+        tMin = -tMax
+        dt = (tMax - tMin) / dim_t
+        self.t = torch.linspace(tMin, tMax-dt, dim_t)
+        self.t_window = [torch.abs(self.t + self.t_end).argmin(),
+                         torch.abs(self.t - self.t_end).argmin()]
+        
+        self.ber = BERMetric(decision_level=decision_level,
+                     pulse_number=seq_len//2,
+                     pulse_width=pulse_width,
+                     t=self.t,
+                     t_window=self.t_window)
 
 
     def forward(self, x):
+        if len(x.shape) == 4 and x.shape[0] == 1:
+            x = x.squeeze(dim=0)
         x = x.permute(2, 0, 1)
         real = x.real
         imag = x.imag
@@ -63,17 +94,24 @@ class ConvNet_regressor(pl.LightningModule):
         data, target = batch
         preds = self.forward(data)
         
-        loss = self.criterion(transform_to_1d(preds.unsqueeze(1)), transform_to_1d(target.unsqueeze(1)))
+        preds = transform_to_1d(preds)
+        target = transform_to_1d(target)
+        
+        loss = self.criterion(preds, target)
         self.log("loss_train", loss, prog_bar = False, logger = True)
-        return loss
+        return {"loss": loss, "preds": preds, "target": target}
 
 
     def validation_step(self, batch, batch_idx):
         data, target = batch
         preds = self.forward(data)
 
-        loss = self.criterion(transform_to_1d(preds.unsqueeze(1)), transform_to_1d(target.unsqueeze(1)))
+        preds = transform_to_1d(preds)
+        target = transform_to_1d(target)
+        
+        loss = self.criterion(preds, target)
         self.log("loss_val", loss, prog_bar = False, logger = True)
+        return {'preds':preds , 'target': target}
 
 
     def configure_optimizers(self):
@@ -85,19 +123,45 @@ class ConvNet_regressor(pl.LightningModule):
         return [opt], [sch]
 
 
-    # def training_epoch_end(self, outputs):
-    #     preds = torch.cat([r['preds'] for r in outputs], dim=0)
-    #     targets = torch.cat([r['target'] for r in outputs], dim=0)
-    #     self.train_accuracy(preds, targets)
-    #     self.log('accuracy_train', self.train_accuracy, prog_bar = True, logger = True)
-    
+    def training_epoch_end(self, outputs):
+        preds = torch.cat([r['preds'] for r in outputs], dim=0)
+        target = torch.cat([r['target'] for r in outputs], dim=0)
 
-    # def validation_epoch_end(self, outputs):
-    #     preds = torch.cat([r['preds'] for r in outputs], dim=0)
-    #     targets = torch.cat([r['target'] for r in outputs], dim=0)
+        self.ber.update(preds.squeeze(1), target.squeeze(1))
+        ber_value = self.ber.compute()
+        q_factor = QFactor(ber_value)
+        self.log('Q_factor', q_factor, prog_bar = True, logger = True)
+        
+        nt1 = torch.abs(self.t - 0.5 * self.pulse_width).argmin()
+        nt2 = torch.abs(self.t - 8.5 * self.pulse_width).argmin()
+        fig, ax = plt.subplots(1, 1)
+        ax.plot(self.t[nt1:nt2], target[0,0,nt1:nt2].real, label='Target')
+        ax.plot(self.t[nt1:nt2], preds[0,0,nt1:nt2].detach().real, label='Predicted')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Re(E)')
+        self.logger.experiment.add_figure('prediction', fig, global_step=self.current_epoch)
 
-    #     self.val_accuracy(preds, targets)
-    #     self.log('accuracy_val', self.val_accuracy, prog_bar = True, logger = True)
+    def validation_epoch_end(self, outputs):
+        preds = torch.cat([r['preds'] for r in outputs], dim=0)
+        target = torch.cat([r['target'] for r in outputs], dim=0)
+
+        self.ber.update(preds.squeeze(1), target.squeeze(1))
+        ber_value = self.ber.compute()
+        q_factor = QFactor(ber_value)
+        self.log('Q_factor', q_factor, prog_bar = True, logger = True)
+        
+        nt1 = torch.abs(self.t - 0.5 * self.pulse_width).argmin()
+        nt2 = torch.abs(self.t - 8.5 * self.pulse_width).argmin()
+        fig, ax = plt.subplots(1, 1)
+        ax.plot(self.t[nt1:nt2], target[0,0,nt1:nt2].real, label='Target')
+        ax.plot(self.t[nt1:nt2], preds[0,0,nt1:nt2].detach().real, label='Predicted')
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Re(E)')
+        self.logger.experiment.add_figure('prediction', fig, global_step=self.current_epoch)
+        # fig = px.line(x=self.t[nt1:nt2], y=target[0,0,nt1:nt2].real, title='Target', labels={'x':'Time', 'y':'real E'})
+        # plot(fig)
+        # fig = px.line(x=self.t[nt1:nt2], y=preds[0,0,nt1:nt2].detach().real, title='Predicted', labels={'x':'Time', 'y':'real E'})
+        # plot(fig)
 
     def get_configuration(self):
         '''
@@ -152,7 +216,6 @@ class ConvNet(nn.Module):
                     nn.Dropout(0.3)
                     )
         
-        self.flatten = nn.Flatten()
         self.imag_model = deepcopy(self.real_model)
         self.real_fc = nn.Linear(in_features, in_features)
         self.imag_fc = nn.Linear(in_features, in_features)
@@ -161,12 +224,10 @@ class ConvNet(nn.Module):
     def forward(self, real, imag):
         real = self.real_model(real)
         real = mean(real, dim = 1)
-        # real = self.flatten(real)
         real = self.real_fc(real)
         
         imag = self.imag_model(imag)
         imag = mean(imag, dim = 1)
-        # imag = self.flatten(imag)
         imag = self.imag_fc(imag)
         
         return real, imag
