@@ -152,7 +152,7 @@ class ConvNet_regressor(pl.LightningModule):
         
         nt1 = torch.abs(self.t - 0.5 * self.pulse_width).argmin()
         nt2 = torch.abs(self.t - 8.5 * self.pulse_width).argmin()
-        fig, ax = plt.subplots(1, 1)
+        fig, ax = plt.subplots(1, 1, dpi=150)
         ax.plot(self.t[nt1:nt2], target[0,0,nt1:nt2].cpu().real, label='Target')
         ax.plot(self.t[nt1:nt2], preds[0,0,nt1:nt2].detach().cpu().real, label='Predicted')
         ax.set_xlabel('Time')
