@@ -17,7 +17,10 @@ data:
     batch_size: 1
     seq_len: 2049
     dispersion: 0.5
-    nonlinearity: 0.5
+    nonlinearity: null
+    generation_nonlinearity_limits:
+      - 0.05
+      - 0.5
     pulse_width: 10
     z_end: 100
     dz: 0.1
@@ -29,7 +32,4 @@ data:
     device: available
     data_source_type: generation
     generation_seed: 42
-    generation_nonlinearity_limits:
-      - 0.02
-      - 0.4
     complex_type_size: 64
