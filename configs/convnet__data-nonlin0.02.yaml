@@ -12,7 +12,7 @@ model:
     decision_level: 2
     in_features: 4096
     bias: True
-    criterion: EVM
+    criterion: MSE
     optimizer: Adam
     optimizer_kwargs:
       lr: 0.001
