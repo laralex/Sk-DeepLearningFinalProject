@@ -23,7 +23,7 @@ data:
     dz: 0.1
     z_stride: 1000
     dim_t: 65536
-    dispersion_compensate: False
+    dispersion_compensate: True
     num_blocks: 32
     two_dim_data: True
     device: available
