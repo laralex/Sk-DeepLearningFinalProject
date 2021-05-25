@@ -365,4 +365,4 @@ def QFactor(BER):
         DESCRIPTION: Estimated Q Factor
     '''
     # 20*torch.log10((2**0.5)*torch.from_numpy(special.erfcinv(2*BER.numpy())))
-    return 20*torch.log10((2**0.5)*torch.tensor(special.erfcinv(2*BER.numpy())))
+    return 20*torch.log10((2**0.5)*torch.tensor(special.erfcinv(2*BER.cpu().numpy())))
