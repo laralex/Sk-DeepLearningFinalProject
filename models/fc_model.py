@@ -8,6 +8,7 @@ import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
 import models
 from models.loss_functions import EVM
+from copy import deepcopy
 
 
 class FC_regressor(pl.LightningModule):
@@ -58,7 +59,11 @@ class FC_regressor(pl.LightningModule):
 
 
     def forward(self, x):
-        return self.net(x)
+        real = x.real
+        imag = x.imag
+        real, imag= self.net(real,imag)
+
+        return real + 1j*imag
 
 
     def training_step(self, batch, batch_idx):
@@ -124,7 +129,7 @@ class FC_model(torch.nn.Module):
     Number of layers and sizes can be tuned.
     '''
     
-    def __init__(self, in_features: int, layers: int, sizes:list = None, bias = False, activation = 'ReLU'):
+    def __init__(self, in_features: int, layers: int, sizes:list = None, bias: bool = False, activation: str = 'ReLU'):
         '''
         @in_features - number of features in input vector
         @layers - number of linear layers in model
@@ -148,7 +153,7 @@ class FC_model(torch.nn.Module):
 
         # Number of layers and list of layers
         self.n_layers = layers
-        self.layers = nn.ModuleList([])
+        self.layers_real = nn.ModuleList([])
 
         # Activation function
         ActivationClass = getattr(torch.nn, activation)
@@ -159,16 +164,20 @@ class FC_model(torch.nn.Module):
 
         # Adding linear layers and activations to list
         for idx in range(layers):
-            self.layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
-            self.layers.append(ActivationClass())
+            self.layers_real.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+            self.layers_real.append(ActivationClass())
         
+        # layers for imaginary values
+        self.layers_imag = deepcopy(self.layers_real)
 
-    def forward(self,x):
+
+    def forward(self,real, imag):
         # forward prop for all layers 
-        for layer in self.layers:
-            x = layer(x)
+        for layer_real, layer_imag in zip(self.layers_real, self.layers_imag):
+            real = layer_real(real)
+            imag = layer_imag(imag)
         
-        return x 
+        return real, imag 
 
 
 
