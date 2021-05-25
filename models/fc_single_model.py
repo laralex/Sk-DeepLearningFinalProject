@@ -11,7 +11,14 @@ from models.loss_functions import EVM
 from copy import deepcopy
 
 
-class FC_regressor(pl.LightningModule):
+# File with test model FC_cat_regressor
+# It's the same model as FC_regressor but it uses doubled sizes of layers
+# for real and imaginary part. 
+# Input vector is splitted to real and imag parts, these parts are concatenated
+# to a single vector, that comes to NN 
+# Output is splitted to real and imaginary part, then transformed to complex vector  
+
+class FC_cat_regressor(pl.LightningModule):
     def __init__(
         self, 
         in_features: int,
@@ -47,7 +54,7 @@ class FC_regressor(pl.LightningModule):
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
 
-        self.net = FC_model(in_features, layers, sizes, bias)
+        self.net = FC_cat_model(in_features, layers, sizes, bias)
 
         if criterion == 'MSE':
             self.criterion = nn.MSELoss()
@@ -58,12 +65,12 @@ class FC_regressor(pl.LightningModule):
         self.val_accuracy = torchmetrics.Accuracy()
 
 
-    def forward(self, x):
-        real = x.real
-        imag = x.imag
-        real, imag= self.net(real,imag)
-
-        return real + 1j*imag
+    def forward(self, x):       
+        x = torch.hstack((x.real, x.imag))
+        assert len(x)%2 == 0 , 'Wrong concatenation implemetation'
+        x = self.net(x)
+        half_idxs = len(x)//2
+        return x[:half_idxs] + 1j*x[half_idxs:]
 
 
     def training_step(self, batch, batch_idx):
@@ -123,7 +130,7 @@ class FC_regressor(pl.LightningModule):
         return configuration
 
 
-class FC_model(torch.nn.Module):
+class FC_cat_model(torch.nn.Module):
     '''
     Model with linear (fully connected) layers only.
     Number of layers and sizes can be tuned.
@@ -137,7 +144,7 @@ class FC_model(torch.nn.Module):
             if @sizes == None : uses @in_features for all layers instead
         @bias - whether to use bias for linear layers or not
         '''
-        super(FC_model, self).__init__()
+        super(FC_cat_model, self).__init__()
         # check if @sizes was defined 
         if sizes != None:
             # check if the @sizes has number of elements equal to number of layers
@@ -151,9 +158,12 @@ class FC_model(torch.nn.Module):
         # Add input size to the begining of @sizes
         self.sizes.insert(0, in_features)
 
+        # double size for real and imag part
+        self.sizes = [size*2 for size in self.sizes]
+
         # Number of layers and list of layers
         self.n_layers = layers
-        self.layers_real = nn.ModuleList([])
+        self.layers = nn.ModuleList([])
 
         # Activation function
         ActivationClass = getattr(torch.nn, activation)
@@ -164,20 +174,18 @@ class FC_model(torch.nn.Module):
 
         # Adding linear layers and activations to list
         for idx in range(layers):
-            self.layers_real.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
-            self.layers_real.append(ActivationClass())
+            self.layers.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+            self.layers.append(ActivationClass())
         
-        # layers for imaginary values
-        self.layers_imag = deepcopy(self.layers_real)
 
 
-    def forward(self,real, imag):
-        # forward prop for all layers 
-        for layer_real, layer_imag in zip(self.layers_real, self.layers_imag):
-            real = layer_real(real)
-            imag = layer_imag(imag)
-        
-        return real, imag 
+    def forward(self, x):
+        # forward prop for all layers
+                 
+        for layer in self.layers:
+            x = layer(x)
+
+        return x 
 
 
 
