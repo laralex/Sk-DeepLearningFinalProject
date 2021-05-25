@@ -54,7 +54,9 @@ class ConvNet_regressor(pl.LightningModule):
         self.scheduler_kwargs = scheduler_kwargs
 
         self.net = ConvNet(in_features, bias)
-
+        
+        self.loss_type = criterion
+        
         if criterion == 'MSE':
             self.criterion = nn.MSELoss()
         elif criterion == 'EVM':
@@ -74,9 +76,9 @@ class ConvNet_regressor(pl.LightningModule):
                          torch.abs(self.t - self.t_end).argmin()]
         
         self.ber = BERMetric(decision_level=decision_level,
-                     pulse_number=seq_len//2,
+                     pulse_number=seq_len,
                      pulse_width=pulse_width,
-                     t=self.t,
+                     t=self.t+self.t_end,
                      t_window=self.t_window)
 
 
@@ -97,7 +99,13 @@ class ConvNet_regressor(pl.LightningModule):
         preds = transform_to_1d(preds)
         target = transform_to_1d(target)
         
-        loss = self.criterion(preds, target)
+        if self.loss_type == 'MSE':
+            loss_real = self.criterion(preds.real, target.real)
+            loss_imag = self.criterion(preds.imag, target.imag)
+            loss = loss_real + loss_imag
+        elif self.loss_type == 'EVM':
+            loss = self.criterion(preds, target)
+            
         self.log("loss_train", loss, prog_bar = False, logger = True)
         return {"loss": loss, "preds": preds, "target": target}
 
@@ -109,7 +117,13 @@ class ConvNet_regressor(pl.LightningModule):
         preds = transform_to_1d(preds)
         target = transform_to_1d(target)
         
-        loss = self.criterion(preds, target)
+        if self.loss_type == 'MSE':
+            loss_real = self.criterion(preds.real, target.real)
+            loss_imag = self.criterion(preds.imag, target.imag)
+            loss = loss_real + loss_imag
+        elif self.loss_type == 'EVM':
+            loss = self.criterion(preds, target)
+        
         self.log("loss_val", loss, prog_bar = False, logger = True)
         return {'preds':preds , 'target': target}
 
