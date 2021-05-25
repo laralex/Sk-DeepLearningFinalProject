@@ -78,7 +78,7 @@ class ConvNet_regressor(pl.LightningModule):
         self.ber = BERMetric(decision_level=decision_level,
                      pulse_number=seq_len,
                      pulse_width=pulse_width,
-                     t=self.t+self.t_end,
+                     t=self.t + self.t_end + 0.5*pulse_width,
                      t_window=self.t_window)
 
 
