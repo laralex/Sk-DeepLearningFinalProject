@@ -96,30 +96,16 @@ class FC_regressor(pl.LightningModule):
 
 
     def forward(self, x):
-        #print('99: ', x.shape)
         if len(x.shape) == 4 and x.shape[0] ==1:
             x = x.squeeze(dim =0)
-        #print('102: ', x.shape)
         x= x.permute(2,0,1)
-        #print('105: ', x.shape)
 
         real = x.real
         imag = x.imag
 
-        #print('re_109: ', real.shape)
-        #print('im_110: ',imag.shape)
         real, imag= self.net(real,imag)
-
-        #print('re_113: ', real.shape)
-        #print('im_114: ',imag.shape)
-        
-        out = (real + 1j*imag)#.unsqueeze(1)
-        
-        #print('118: ', out.shape)
-        out = out.permute(1,2,0)
-        #print('120: ', out.shape)
-
-        return out
+       
+        return (real + 1j*imag).permute(1,2,0)
 
 
     def training_step(self, batch, batch_idx):
