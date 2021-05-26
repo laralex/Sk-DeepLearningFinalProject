@@ -1,4 +1,4 @@
-experiment_name: 'FC_11_nonlinearity0.02'
+experiment_name: 'FC_nonlinearity0.02'
 checkpoint_monitor: 'loss_val'
 checkpoint_monitor_mode: 'min'
 
