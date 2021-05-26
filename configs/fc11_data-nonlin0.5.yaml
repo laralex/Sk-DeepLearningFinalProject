@@ -13,7 +13,7 @@ model:
     in_features: 4096
     bias: True
     sizes: null
-    layers: 11
+    layers: 5
     criterion: MSE
     optimizer: Adam
     optimizer_kwargs:
