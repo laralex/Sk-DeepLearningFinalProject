@@ -66,6 +66,7 @@ class FC_regressor(pl.LightningModule):
 
         ############################
         if criterion == 'MSE':
+            self.loss_type = "MSE"
             self.criterion = nn.MSELoss()
         ############################
         else:
