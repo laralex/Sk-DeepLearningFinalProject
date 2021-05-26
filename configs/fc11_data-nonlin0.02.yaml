@@ -1,4 +1,4 @@
-experiment_name: 'FC_11_nonlinearity0.02'
+experiment_name: 'FC_11_nonlinearity'
 checkpoint_monitor: 'loss_val'
 checkpoint_monitor_mode: 'min'
 
@@ -6,10 +6,10 @@ model:
   class_path: models.fc_model.FC_regressor
   init_args:
     seq_len: 2049
-    pulse_width: 10.0
-    z_end: 100.0
+    pulse_width: 10
+    z_end: 100
     dim_t: 65536
-    decision_level: 2.0
+    decision_level: 2
     in_features: 4096
     bias: True
     sizes: null
@@ -32,7 +32,7 @@ data:
     batch_size: 1
     seq_len: 2049
     dispersion: 0.5
-    nonlinearity: 0.02
+    nonlinearity: null
     pulse_width: 10
     z_end: 100
     dz: 0.1
