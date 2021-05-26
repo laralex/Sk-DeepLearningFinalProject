@@ -11,10 +11,14 @@ model:
 data:
   class_path: data.split_step_generator.SplitStepGenerator
   init_args:
+    dim_z: 2
+    generation_nonlinearity_limits:
+    - 0.05
+    - 0.5
+    nonlinearity: null
     batch_size: 50
     seq_len: 2049
     dispersion: 0.5
-    nonlinearity: 0.02
     pulse_width: 10
     z_end: 100
     dz: 0.1
@@ -27,3 +31,5 @@ data:
     data_source_type: filesystem
     load_dataset_root_path: None
     complex_type_size: 64
+
+    
