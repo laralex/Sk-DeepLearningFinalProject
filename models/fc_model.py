@@ -38,6 +38,7 @@ class FC_regressor(pl.LightningModule):
         scheduler: str = 'StepLR',
         scheduler_kwargs: Dict[str, Any] = {'step_size':10},
         criterion: str = 'MSE',
+        activation: str = 'ReLU'
 
         ):
         '''
@@ -62,7 +63,7 @@ class FC_regressor(pl.LightningModule):
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
 
-        self.net = FC_model(in_features, layers, sizes, bias)
+        self.net = FC_model(in_features, layers, sizes, bias, activation)
 
         ############################
         if criterion == 'MSE':

@@ -5,6 +5,7 @@ checkpoint_monitor_mode: 'min'
 model:
   class_path: models.fc_model.FC_regressor
   init_args:
+    activation: LeakyReLU
     seq_len: 2049
     pulse_width: 10
     z_end: 100
@@ -13,7 +14,7 @@ model:
     in_features: 4096
     bias: True
     sizes: null
-    layers: 5
+    layers: 3
     criterion: MSE
     optimizer: Adam
     optimizer_kwargs:
