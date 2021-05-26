@@ -42,6 +42,6 @@ data:
     num_blocks: 32
     two_dim_data: True
     device: available
-    data_source_type: generation
+    data_source_type: filesystem
     load_dataset_root_path: None
     complex_type_size: 64
