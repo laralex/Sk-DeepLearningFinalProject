@@ -18,7 +18,7 @@ class SplitStepGenerator(pl.LightningDataModule):
                  batch_size: int,
                  seq_len: int,
                  dispersion: float,
-                 nonlinearity: float,
+                 nonlinearity: Optional[float],
                  pulse_width: float,
                  z_end: float,
                  dz: float,
@@ -105,6 +105,8 @@ class SplitStepGenerator(pl.LightningDataModule):
             'num_blocks': self.num_blocks,
             'two_dim_data': self.two_dim_data,
         }
+        if self.generation_nonlinearity_limits is not None:
+            self.signal_hparams['generation_nonlinearity_limits'] = self.generation_nonlinearity_limits
 
     def prepare_data(self):
         if self.generation_nonlinearity_limits is None:

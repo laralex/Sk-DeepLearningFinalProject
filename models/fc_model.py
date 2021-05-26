@@ -8,11 +8,13 @@ from torch.optim.optimizer import Optimizer
 import torchmetrics
 from typing import Any, Dict, Optional, Type, Union
 import models
+from models import loss_functions
 from copy import deepcopy
 from math import sqrt
 from models.metrics import BERMetric, QFactor
 from data.transform_1d_2d import transform_to_1d
 import matplotlib.pyplot as plt
+
 
 
 class FC_regressor(pl.LightningModule):
@@ -62,7 +64,7 @@ class FC_regressor(pl.LightningModule):
 
         self.net = FC_model(in_features, layers, sizes, bias)
 
-        self.criterion = getattr(models.loss_functios ,criterion)()
+        self.criterion = getattr(loss_functions ,criterion)()
 
         self.__ber_param_init(seq_len, pulse_width, z_end, dim_t, decision_level)
 
