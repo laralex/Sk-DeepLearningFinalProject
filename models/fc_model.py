@@ -64,7 +64,12 @@ class FC_regressor(pl.LightningModule):
 
         self.net = FC_model(in_features, layers, sizes, bias)
 
-        self.criterion = getattr(loss_functions ,criterion)()
+        ############################
+        if criterion == 'MSE':
+            self.criterion = nn.MSELoss()
+        ############################
+        else:
+            self.criterion = getattr(loss_functions ,criterion)()
 
         self.__ber_param_init(seq_len, pulse_width, z_end, dim_t, decision_level)
 
@@ -115,7 +120,12 @@ class FC_regressor(pl.LightningModule):
         preds = transform_to_1d(preds)
         target = transform_to_1d(target)
 
-        loss = self.criterion(preds, target)
+        #loss = self.criterion(preds, target)
+
+        if self.loss_type == 'MSE':
+            loss_real = self.criterion(preds.real, target.real)
+            loss_imag = self.criterion(preds.imag, target.imag)
+            loss = loss_real + loss_imag
 
         self.log("loss_train", loss, prog_bar = False, logger = True)
         return {"loss":loss, "preds": preds, "target": target}
@@ -128,7 +138,13 @@ class FC_regressor(pl.LightningModule):
         preds = transform_to_1d(preds)
         target = transform_to_1d(target)
 
-        loss = self.criterion(preds, target)
+        #loss = self.criterion(preds, target)
+        if self.loss_type == 'MSE':
+            loss_real = self.criterion(preds.real, target.real)
+            loss_imag = self.criterion(preds.imag, target.imag)
+            loss = loss_real + loss_imag
+
+
         self.log("loss_val", loss, prog_bar = False, logger= True)
 
         return {'preds':preds , 'target': target}
