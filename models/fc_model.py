@@ -108,7 +108,7 @@ class FC_regressor(pl.LightningModule):
 
         print('re_109: ', real.shape)
         print('im_110: ',imag.shape)
-        real, imag= self.net(real.imag)
+        real, imag= self.net(real,imag)
 
         print('re_113: ', real.shape)
         print('im_114: ',imag.shape)
