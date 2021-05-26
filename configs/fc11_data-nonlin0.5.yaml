@@ -5,7 +5,7 @@ checkpoint_monitor_mode: 'min'
 model:
   class_path: models.fc_model.FC_regressor
   init_args:
-    activation: Sigmoid
+    activation: LeakyReLU
     seq_len: 2049
     pulse_width: 10
     z_end: 100
