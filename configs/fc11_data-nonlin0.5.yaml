@@ -1,0 +1,47 @@
+experiment_name: 'FC_nonlinearity0.5'
+checkpoint_monitor: 'loss_val'
+checkpoint_monitor_mode: 'min'
+
+model:
+  class_path: models.fc_model.FC_regressor
+  init_args:
+    seq_len: 2049
+    pulse_width: 10
+    z_end: 100
+    dim_t: 65536
+    decision_level: 2
+    in_features: 4096
+    bias: True
+    sizes: null
+    layers: 11
+    criterion: MSE
+    optimizer: Adam
+    optimizer_kwargs:
+      lr: 0.001
+      betas:
+        - 0.9
+        - 0.999
+    scheduler: StepLR
+    scheduler_kwargs:
+      step_size: 10
+      gamma: 0.1
+
+data:
+  class_path: data.split_step_generator.SplitStepGenerator
+  init_args:
+    batch_size: 1
+    seq_len: 2049
+    dispersion: 0.5
+    nonlinearity: 0.5
+    pulse_width: 10
+    z_end: 100
+    dz: 0.1
+    z_stride: 1000
+    dim_t: 65536
+    dispersion_compensate: False
+    num_blocks: 32
+    two_dim_data: True
+    device: available
+    data_source_type: filesystem
+    load_dataset_root_path: None
+    complex_type_size: 64
