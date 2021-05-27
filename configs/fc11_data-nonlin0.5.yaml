@@ -33,7 +33,6 @@ data:
     batch_size: 1
     seq_len: 2049
     dispersion: 0.5
-    nonlinearity: null
     pulse_width: 10
     z_end: 100
     dz: 0.1
