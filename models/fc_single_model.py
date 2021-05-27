@@ -86,7 +86,7 @@ class FC_cat_regressor(pl.LightningModule):
             self.loss_type = 'EVM'
             self.criterion = EVM()
 
-        self.__ber_param_init(self, seq_len, pulse_width, z_end, dim_t, decision_level)
+        self.__ber_param_init(seq_len, pulse_width, z_end, dim_t, decision_level)
         
 
     def __ber_param_init(self, seq_len, pulse_width, z_end, dim_t, decision_level):
