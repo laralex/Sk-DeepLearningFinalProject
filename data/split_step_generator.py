@@ -166,7 +166,7 @@ class SplitStepDataset(Dataset):
         batch_size: int,
         seq_len: int,
         dispersion: float,
-        nonlinearity: float,
+        nonlinearity: Optional[float],
         pulse_width: float,
         z_end: float,
         dz: float,
@@ -211,6 +211,7 @@ class SplitStepDataset(Dataset):
         if nonlinearity_limits is not None:
             self.nonlin_min, self.nonlin_max = nonlinearity_limits
         else:
+            assert self.nonlinearity is not None
             self.nonlin_min, self.nonlin_max = self.nonlinearity, self.nonlinearity
         self.batches_list = None
         if pregenerate:
