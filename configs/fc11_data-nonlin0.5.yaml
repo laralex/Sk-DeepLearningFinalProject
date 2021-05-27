@@ -15,6 +15,8 @@ model:
     bias: True
     sizes: null
     layers: 3
+    dropout: 0.3
+    use_batchnorm: true
     criterion: MSE
     optimizer: Adam
     optimizer_kwargs:
@@ -26,29 +28,26 @@ model:
     scheduler_kwargs:
       step_size: 10
       gamma: 0.1
-
+      
 data:
   class_path: data.split_step_generator.SplitStepGenerator
   init_args:
     batch_size: 1
     seq_len: 2049
     dispersion: 0.5
+    nonlinearity: 0.5
     pulse_width: 10
     z_end: 100
     dz: 0.1
     z_stride: 1000
     dim_t: 65536
-    dispersion_compensate: true
+    dispersion_compensate: False
     num_blocks: 32
     two_dim_data: True
     device: available
     data_source_type: filesystem
     load_dataset_root_path: None
-    complex_type_size: 64    
-    dim_z: 2
-    generation_nonlinearity_limits:
-    - 0.05
-    - 0.5
+    complex_type_size: 64
 
     
     

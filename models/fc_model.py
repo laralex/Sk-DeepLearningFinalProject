@@ -38,7 +38,10 @@ class FC_regressor(pl.LightningModule):
         scheduler: str = 'StepLR',
         scheduler_kwargs: Dict[str, Any] = {'step_size':10},
         criterion: str = 'MSE',
-        activation: str = 'ReLU'
+        activation: str = 'ReLU',
+        use_batchnorm: bool = False,
+        dropout: float = 0.0
+        # TODO activation kwargs
 
         ):
         '''
@@ -53,6 +56,9 @@ class FC_regressor(pl.LightningModule):
         scheduler (str) - name of scheduler that will be used
         scheduler_kwargs (dict) - parameters of scheduler
         criterion (str) - Loss function that will be used for training. "MSE" or "EVM"
+        activation (str) - class of activation function from torch.nn.
+        use_batchnorm: (bool) - if True - adds batchnorm1D after each linear layer
+        dropout: (float) - if not 0.0 - adds dropout, after each activation
         '''
         
 
@@ -63,7 +69,8 @@ class FC_regressor(pl.LightningModule):
         self.scheduler = scheduler
         self.scheduler_kwargs = scheduler_kwargs
 
-        self.net = FC_model(in_features, layers, sizes, bias, activation)
+        self.net = FC_model(in_features, layers, sizes, bias, activation, use_batchnorm, dropout)
+
 
         ############################
         if criterion == 'MSE':
@@ -71,6 +78,7 @@ class FC_regressor(pl.LightningModule):
             self.criterion = nn.MSELoss()
         ############################
         else:
+            self.loss_type = criterion
             self.criterion = getattr(loss_functions ,criterion)()
 
         self.__ber_param_init(seq_len, pulse_width, z_end, dim_t, decision_level)
@@ -103,15 +111,21 @@ class FC_regressor(pl.LightningModule):
 
 
     def forward(self, x):
+        # example input shape [1,1,4096,32]
         if len(x.shape) == 4 and x.shape[0] ==1:
+            # output shape [1,4096,32]
             x = x.squeeze(dim =0)
-        x= x.permute(2,0,1)
+        # output shape [32,1, 4096]
+        x = x.permute(2,0,1)
 
+        # both shapes: [32,1, 4096]
         real = x.real
         imag = x.imag
-
+        
+        # both shapes: [32,1, 4096]
         real, imag= self.net(real,imag)
-       
+
+        #return [1,4096,32] shape vector
         return (real + 1j*imag).permute(1,2,0)
 
 
@@ -128,6 +142,8 @@ class FC_regressor(pl.LightningModule):
             loss_real = self.criterion(preds.real, target.real)
             loss_imag = self.criterion(preds.imag, target.imag)
             loss = loss_real + loss_imag
+        else: 
+            loss  = self.criterion(preds, target)
 
         self.log("loss_train", loss, prog_bar = False, logger = True)
         return {"loss":loss, "preds": preds, "target": target}
@@ -145,7 +161,8 @@ class FC_regressor(pl.LightningModule):
             loss_real = self.criterion(preds.real, target.real)
             loss_imag = self.criterion(preds.imag, target.imag)
             loss = loss_real + loss_imag
-
+        else: 
+            loss = self.criterion(preds, target)
 
         self.log("loss_val", loss, prog_bar = False, logger= True)
 
@@ -171,6 +188,7 @@ class FC_regressor(pl.LightningModule):
 
         #self.train_accuracy(preds, targets)
         self.log('Q_factor_train', q_factor, prog_bar = True, logger = True)
+        self.log('BER_train', ber_value, prog_bar = True, logger = True)
     
 
     def validation_epoch_end(self, outputs):
@@ -183,6 +201,7 @@ class FC_regressor(pl.LightningModule):
 
         #self.val_accuracy(preds, targets)
         self.log('Q_factor_val', q_factor, prog_bar = True, logger = True)
+        self.log('BER_val', ber_value, prog_bar = True, logger = True)
 
         nt1 = torch.abs(self.t - 0.5 * self.pulse_width).argmin()
         nt2 = torch.abs(self.t - 8.5 * self.pulse_width).argmin()
@@ -206,7 +225,9 @@ class FC_regressor(pl.LightningModule):
             'optimizer': self.optimizer,
             'optimizer_param': str(self.optimizer_kwargs)[1:-1], 
             'scheduler': self.scheduler,
-            'scheduler_param': str(self.scheduler_kwargs)[1:-1]
+            'scheduler_param': str(self.scheduler_kwargs)[1:-1],
+            'use_batchnorm': self.net.use_batchnorm,
+            'dropout': self.net.dropout
         }
         return configuration
 
@@ -217,13 +238,24 @@ class FC_model(torch.nn.Module):
     Number of layers and sizes can be tuned.
     '''
     
-    def __init__(self, in_features: int, layers: int, sizes:list = None, bias: bool = False, activation: str = 'ReLU'):
+    def __init__(self, 
+            in_features: int, 
+            layers: int, 
+            sizes:list = None, 
+            bias: bool = False, 
+            activation: str = 'ReLU',
+            use_batchnorm: bool = False,
+            dropout: float = 0.0 
+            ):
         '''
         @in_features - number of features in input vector
         @layers - number of linear layers in model
         @sizes - list of output features for linear layers. 
             if @sizes == None : uses @in_features for all layers instead
         @bias - whether to use bias for linear layers or not
+        @activation - which type of activation use (torch.nn)
+        @use_batchnorm - use Batchnorm1D after linear layer or not
+        @dropout - if not 0.0 - then uses dropout after activation
         '''
         super(FC_model, self).__init__()
         # check if @sizes was defined 
@@ -249,11 +281,28 @@ class FC_model(torch.nn.Module):
         #parameters for saving configuaration
         self.bias = bias
         self.activation_name = activation
+        self.use_batchnorm = use_batchnorm
+        self.dropout = dropout
 
         # Adding linear layers and activations to list
         for idx in range(layers):
-            self.layers_real.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
-            self.layers_real.append(ActivationClass())
+            # if not last layer
+            if idx < layers-1:
+                # Add linear layer
+                self.layers_real.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+                # Check and add batchnorm
+                if self.use_batchnorm:
+                    self.layers_real.append(nn.BatchNorm1d(1))
+                # Activation
+                self.layers_real.append(ActivationClass())
+                # if dropout is not 0 -> also add it 
+                if self.dropout != 0.0:
+                    self.layers_real.append(nn.Dropout(self.dropout))
+            # if last layer
+            else:
+                self.layers_real.append(nn.Linear(self.sizes[idx], self.sizes[idx+1], bias = bias))
+                #self.layers_real.append(ActivationClass())
+
         
         # layers for imaginary values
         self.layers_imag = deepcopy(self.layers_real)
