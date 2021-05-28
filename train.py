@@ -89,7 +89,7 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, 
         torch.multiprocessing.set_start_method('spawn')
     except: pass
     old_cwd = os.getcwd()
-    os.chdir(root_dir)
+    # os.chdir(root_dir)
     try:
         cli = CustomLightningCLI(
             root_dir,
@@ -107,7 +107,7 @@ def main(root_dir='.', config_path=None, gpu_indices=1, checkpoint_kwargs=None, 
             subclass_mode_model=True,
             subclass_mode_data=True)
     finally:
-        os.chdir(old_cwd)
+        # os.chdir(old_cwd)
         gc.collect()
 
     return cli.model, cli.datamodule
