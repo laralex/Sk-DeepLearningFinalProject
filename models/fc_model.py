@@ -36,7 +36,7 @@ class FC_regressor(pl.LightningModule):
         optimizer:str = 'Adam',
         optimizer_kwargs: Dict[str, Any] = {'lr':1e-4},
         scheduler: str = 'StepLR',
-        scheduler_kwargs: Dict[str, Any] = {'step_size':10},
+        scheduler_kwargs: Dict[str, Any] = {},
         criterion: str = 'MSE',
         activation: str = 'ReLU',
         use_batchnorm: bool = False,
