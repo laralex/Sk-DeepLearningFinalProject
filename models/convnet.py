@@ -199,7 +199,7 @@ class ConvNet(nn.Module):
     Inspired from https://discuss.pytorch.org/t/cnn-architecture-for-short-time-series-data/99814
     '''
     
-    def __init__(self, in_features: int, bias=False, activation='ReLU'):
+    def __init__(self, in_features: int, bias=False, activation='Tanh'):
         '''
         @num_classes - number of features in input vector
         @bias - whether to use bias for convolutional layers or not
