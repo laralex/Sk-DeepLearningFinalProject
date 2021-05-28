@@ -2,6 +2,25 @@ experiment_name: 'FC_nonlinearity0.5'
 checkpoint_monitor: 'loss_val'
 checkpoint_monitor_mode: 'min'
 
+# NOTES about  Model 
+# activation:
+#   Seems that ReLU has "dying ReLU problem" due to negative values. You can try different
+# bias:
+#   whether to use bias for Linear layers or not
+# sizes:
+#   if null - outputs for all Linear layers will be equal to in_features.
+#   else - list of output sizes for Linear layers. len of list must be equal to number of layers!
+# layers:
+#   number of Linear layers in net
+# dropout:
+#    if 0.0: then dropout will not be used
+#    else: uses dropout after each activation
+# use_batchnorm:
+#    if True: uses Batchnorm1D after each Linear layer
+# criterion:
+#    As far as I understood MSE works better
+
+
 model:
   class_path: models.fc_model.FC_regressor
   init_args:
