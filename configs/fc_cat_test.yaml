@@ -1,0 +1,76 @@
+experiment_name: 'FC_cat_nonlinearity0.5'
+checkpoint_monitor: 'loss_val'
+checkpoint_monitor_mode: 'min'
+
+# NOTES about  Model 
+# activation:
+#   Seems that ReLU has "dying ReLU problem" due to negative values. You can try different
+# bias:
+#   whether to use bias for Linear layers or not
+# sizes:
+#   if null - outputs for all Linear layers will be equal to in_features.
+#   else - list of output sizes for Linear layers. len of list must be equal to number of layers!
+#   WARNING! It's better not to use 'null' option. because layers have doubled in_features sizes. Risk of OOM.
+# layers:
+#   number of Linear layers in net
+# dropout:
+#    if 0.0: then dropout will not be used
+#    else: uses dropout after each activation
+# use_batchnorm:
+#    if True: uses Batchnorm1D after each Linear layer
+# criterion:
+#    As far as I understood MSE works better
+
+
+model:
+  class_path: models.fc_single_model.FC_cat_regressor
+  init_args:
+    activation: LeakyReLU
+    seq_len: 2049
+    pulse_width: 10
+    z_end: 100
+    dim_t: 65536
+    decision_level: 2
+    in_features: 4096
+    bias: True
+    sizes: null
+    layers: 3
+    dropout: 0.3
+    use_batchnorm: true
+    criterion: MSE
+    optimizer: Adam
+    optimizer_kwargs:
+      lr: 0.001
+      betas:
+        - 0.9
+        - 0.999
+    scheduler: StepLR
+    scheduler_kwargs:
+      step_size: 10
+      gamma: 0.1
+      
+data:
+  class_path: data.split_step_generator.SplitStepGenerator
+  init_args:
+    batch_size: 1
+    seq_len: 2049
+    dispersion: 0.5
+    nonlinearity: 0.5
+    pulse_width: 10
+    z_end: 100
+    dz: 0.1
+    z_stride: 1000
+    dim_t: 65536
+    dispersion_compensate: False
+    num_blocks: 32
+    two_dim_data: True
+    device: available
+    data_source_type: filesystem
+    load_dataset_root_path: None
+    complex_type_size: 64
+
+    
+    
+    
+    
+    
