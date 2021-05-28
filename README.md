@@ -22,7 +22,8 @@ Inspired by the papers:
   notebook for training or loading from a checkpoint
 * [`configs/`](configs/) - YAML files that define each experiment's parameters
 * [`data/`](data/) - definitions of datasets (either preloaded or generated)
-* [`materials/`](materials/) - supplementary materials like presentations, reports, plots
+* [`materials/`](materials/) - supplementary materials like reports, plots
+* 👉 [`presentation/`](presentation/) - final presentation
 * [`models/`](models/) - definitions of models and their training process (optimizers, learning rate schedulers)
 
 ### Requirements
@@ -65,6 +66,3 @@ After that you'll find new folders `downloads/` with external downloaded files (
 A better approach to start training (or resuming or loading for inference), would be to use [`notebooks/training.ipynb`](notebooks/training.ipynb) Jupyter Notebook. In the first section you can set the parameters of further work. Other sections don't usually need any adjustments. After you "Run All" the notebook, either a training will start (a new one, or resumed), or only the model weights will be loaded (if you've chosen to `'load_model'`, see the notebook). 
 
 Anyway after the notebook has been run completely, you should be given `model` variable of type [`pytorch_lightning.LightningModule`](https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html#inference). You can do inference with it suing `model.forward(x)`.
-
-### Experimental results
-...
