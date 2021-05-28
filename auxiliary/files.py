@@ -12,7 +12,10 @@ def find_dataset_subdir(params_dict, datasets_root):
                 with open(candidate_yaml, 'r') as stream:
                     candidate_hparams = yaml.safe_load(stream)
                     if candidate_hparams == params_dict:
+                        print('Matched dataset:', candidate_yaml)
                         return root/version
+                    else:
+                        print("Not matched dataset:", candidate_yaml, [f"ck={k} cv={v} dv={params_dict[k]}" for k, v in candidate_hparams.items() if params_dict[k] != v])
     return None
 
 def load_from_subdir(path, data_type):

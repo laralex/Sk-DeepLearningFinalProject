@@ -1,7 +1,7 @@
 import auxiliary.files
 from data.transform_1d_2d import *
 
-from typing import Any, Dict, Optional, Type, Union, Tuple
+from typing import Any, Dict, Optional, Type, Union, Tuple, List
 import time
 import contextlib
 from torch import tensor
@@ -18,7 +18,6 @@ class SplitStepGenerator(pl.LightningDataModule):
                  batch_size: int,
                  seq_len: int,
                  dispersion: float,
-                 nonlinearity: Optional[float],
                  pulse_width: float,
                  z_end: float,
                  dz: float,
@@ -27,11 +26,12 @@ class SplitStepGenerator(pl.LightningDataModule):
                  dispersion_compensate: bool,
                  num_blocks: int,
                  two_dim_data: bool,
+                 nonlinearity: Optional[float] = None,
                  complex_type_size: int = 128,
                  device: Union[torch.device, str] = 'available',
                  data_source_type: str = 'generation',
                  generation_seed: Optional[int] = None,
-                 generation_nonlinearity_limits: Optional[Tuple[float, float]] = None,
+                 generation_nonlinearity_limits: Optional[List[float]] = None,
                  generate_n_train_batches: Optional[int] = 0,
                  generate_n_val_batches: Optional[int] = 0,
                  generate_n_test_batches: Optional[int] = 0,
@@ -110,7 +110,7 @@ class SplitStepGenerator(pl.LightningDataModule):
 
     def prepare_data(self):
         if self.generation_nonlinearity_limits is None:
-            nonlinearity_limits = (self.nonlinearity, self.nonlinearity)
+            nonlinearity_limits = [self.nonlinearity, self.nonlinearity]
         else:
             nonlinearity_limits = self.generation_nonlinearity_limits
         make_dataset = lambda n_batches=1, seed=None, pregenerate=False, data=None: SplitStepDataset(
@@ -179,7 +179,7 @@ class SplitStepDataset(Dataset):
         complex_type: type,
         n_batches: int,
         device: torch.device,
-        nonlinearity_limits: Optional[Tuple[float, float]] = None,
+        nonlinearity_limits: Optional[List[float]] = None,
         data: Optional[torch.Tensor] = None,
         seed: Optional[int] = None,
         pregenerate: bool = False):
