@@ -1,6 +1,8 @@
 # Signal recovery from nonlinear distortion in optical communications
 The final project of Deep Learning 2021 course at Skoltech, Russia.
 
+## Attention! The version of the report on github was significantly revised the night after the deadline and is very different from the version sent to the canvas. We kindly ask the evaluating committee to consider the version presented on the github.
+
 Team members:
 * Ilya Kuk
 * Razan Dibo
