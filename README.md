@@ -1,8 +1,7 @@
 # Signal recovery from nonlinear distortion in optical communications
 The final project of Deep Learning 2021 course at Skoltech, Russia.
 
-## Attention! The version of the report on github was significantly revised the night after the deadline and is very different from the version sent to the canvas. We kindly ask the evaluating committee to consider the version presented on the github.
-
+## ❗ Attention ❗ We kindly ask the evaluating committee to consider the [`PRESENTATION.pdf`](PRESENTATION.pdf) and [`REPORT.pdf`](REPORT.pdf) from there, rather than Canvas. They were significantly improved the night after the deadline and is very different from the version sent to the Canvas. 
 Team members:
 * Ilya Kuk
 * Razan Dibo
@@ -18,16 +17,18 @@ Inspired by the papers:
 2. [Fundamentals of Coherent Optical Fiber Communications ](https://www.osapublishing.org/jlt/abstract.cfm?URI=jlt-34-1-157)
 
 ### Brief repository overview
-* 👉 [`train.py`](train.py) - entry point for training of models (see
+* [`train.py`](train.py) - entry point for training of models (see
   **Reproduce training and inference** section)
-* 👉 [`notebooks/training.ipynb`](notebooks/training.ipynb) - a quickstart Jupyter
+* [`notebooks/training.ipynb`](notebooks/training.ipynb) - a quickstart Jupyter
   notebook for training or loading from a checkpoint
 * [`configs/`](configs/) - YAML files that define each experiment's parameters
 * [`data/`](data/) - definitions of datasets (either preloaded or generated)
 * [`materials/`](materials/) - supplementary materials like reports, plots
-* 👉 [`presentation/`](presentation/) - final presentation
 * [`models/`](models/) - definitions of models and their training process (optimizers, learning rate schedulers)
-
+* [`auxiliary/`](auxiliary/) - supporting files with utility functions
+* 👉 [`PRESENTATION.pdf`](PRESENTATION.pdf) - final presentation
+* 👉 [`REPORT.pdf`](REPORT.pdf) - project final report
+* 👉 [`VIDEO_PRESENTATION.txt`](VIDEO_PRESENTATION.txt) - link to video with project presentation
 ### Requirements
 A GPU is recommended to perform the experiments. You can use [Google
 Colab](colab.research.google.com) with Jupyter notebooks provided in
